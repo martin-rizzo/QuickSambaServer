@@ -1,0 +1,18 @@
+
+# Ignore backup and temporary files
+*.kate-swp
+*.bak
+*.swp
+*~
+
+# Ignore system and user-specific files
+.DS_Store
+.profile
+Thumbs.db
+
+# Ignore log files
+*.log
+
+# Ignore personal text files
+README-PERSONAL.MD
+
