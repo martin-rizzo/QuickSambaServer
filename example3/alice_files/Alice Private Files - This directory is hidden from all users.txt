@@ -1,0 +1,3 @@
+- Documentation accessible to all.
+- Editing and deletion restricted to Bob
+

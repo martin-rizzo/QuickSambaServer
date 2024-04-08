@@ -1,0 +1,27 @@
+--------------------------------------------------------
+##############  MSX Trivia Challenge  ###############
+--------------------------------------------------------
+
+Welcome to the MSX Trivia Challenge! Did you know that the MSX was first introduced by Microsoft in 1983? Or that it stands for "Machines with Software eXchangeability"? Test your knowledge as you explore the contents of this diskette. Remember, every bit of trivia brings you one step closer to becoming an MSX master!
+
+       _______  __   __  _______  _______  _______ 
+      |       ||  | |  ||       ||       ||   _   |
+      |    _  ||  |_|  ||    ___||    ___||  |_|  |
+      |   |_| ||       ||   |___ |   |___ |       |
+      |    ___||_     _||    ___||    ___||       |
+      |   |      |   |  |   |___ |   |___ |   _   |
+      |___|      |___|  |_______||_______||__| |__|
+
+ * MSX was developed by Microsoft and ASCII Corporation.
+ * Konami created popular games like Metal Gear and Gradius for MSX.
+ * MSX had a standardized cartridge slot.
+ * Yamaha SFG enhanced sound on MSX.
+ * MSX included a BASIC interpreter in ROM.
+ * MSX was popular in Japan, Brazil, and other countries.
+ * MSX2 improved resolution and colors.
+ * Zilog Z80 was the common CPU in MSX.
+ * MSX competed with Commodore 64 and ZX Spectrum.
+ * MSX TurboR, the final version, had improved CPU and graphics.
+
+--------------------------------------------------------
+

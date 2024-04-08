@@ -1,0 +1,27 @@
+-----BEGIN ENCRYPTED KEY-----
+Version: QuickSambaServer
+
+ALICE'S ENIGMA ENCRYPTION KEY - 2024
+
+-----BEGIN PUBLIC KEY-----
+MFwwDQYJKoZIhvcNAQEBBQADSwAwSAJBAJQgTh0h1rAhtWw7RiJ8kO8MRplNh0bL
+e4JtCMkYQ/C15y4+JHhk/7NKh7rG2IyCzg2vJ1/9AjK9v5ASzrosh+0CAwEAAQ==
+-----END PUBLIC KEY-----
+
+-----BEGIN PRIVATE KEY-----
+MIIBVgIBADANBgkqhkiG9w0BAQEFAASCAUAwggE8AgEAAkEAlCBOHSHWsCG1bDtG
+InyQ7wxGmU2HRst7gm0IyRhD8LXnLj4keGT/s0qHuscKYjILODa8nX/0CMr2/kBL
+OuiyH7QIDAQABAkEAk7v2ut6Ru/4xI6eLnmBZ0RzoZ2u4qV3H6E8rvH6Wkw3TXx9
+APZ5GwPmTMtHrxzwxVB3UZm1iG0gdw2CqGDUZQIhAPWvPCt3HZT92e/w7zAkzLdk
+FxJol0WEb1APdPzRlRqDAiEAt/lH4YJ7HVV4mXbw+3NVkPLHGbXvdhJcY/8O4kUV
+MWUCIQCPV2IKwZEvI6jUqGvRRdYrZJJqHg8S9g+vQ1fSEtKKQwIhALi1xrB3L9F3
+XW5cIuzxwWqt2EdtZ2dx5wMmzSWkDlYhAiB6nGp0EB48wb2DrJlL9gwOHqQOvBSv
+m+yEtU9ZflXgMw==
+-----END PRIVATE KEY-----
+
+This encrypted key is generated specifically for the Enigma encryption algorithm used in Alice's project. It's crucial for encrypting and decrypting sensitive data related to the project. Please handle with care and ensure its security at all times.
+
+For any inquiries or assistance regarding this key, please contact Alice at [email protected]
+
+-----END ENCRYPTED KEY-----
+

@@ -1,0 +1,15 @@
+Grocery List:
+
+- Milk
+- Eggs
+- Whole wheat bread
+- Apples
+- Chicken
+- Spinach
+- Plain yogurt
+- Toilet paper
+- Mushrooms
+- Onions
+
+Additional Note: Research about the "Shor's algorithm".
+

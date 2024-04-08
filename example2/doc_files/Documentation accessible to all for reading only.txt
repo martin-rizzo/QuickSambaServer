@@ -1,0 +1,3 @@
+- Documentation accessible to all.
+- Read-only access permissions for files and documents.
+

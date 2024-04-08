@@ -1,0 +1,3 @@
+- Bob's Private Files
+- This directory can only be accessed by Bob
+
