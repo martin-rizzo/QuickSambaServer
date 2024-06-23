@@ -41,23 +41,27 @@
 #      environment variables, volumes, etc.
 #      Make sure to properly format them by escaping newline characters '\'.
 #
-PROJECT_DIR=$(realpath $(dirname "${BASH_SOURCE[0]}") )
+PROJECT_DIR=$(realpath "$(dirname "${BASH_SOURCE[0]}")" )
 IMAGE_NAME='quick-samba-server'
 IMAGE_VER='0.1'
 CONTAINER_NAME='samba-server'
 CONTAINER_PARAMETERS="
-       -e USER_ID=$(id -u) -e GROUP_ID=$(id -g)
+       -e USER_ID=$(id -u)
+       -e GROUP_ID=$(id -g)
        -v {DIR_TO_MOUNT}:/appdata:Z
        -p 21:21
 "
 LOG_LEVEL='debug'  # | debug | info | warn | error | fatal |
+NEWLINE='
+'
 
 #---------------------------- MESSAGE HANDLING -----------------------------#
 
 RED='\e[1;31m'
 GREEN='\e[1;32m'
 YELLOW='\e[1;33m'
-BLUE='\e[1;34m'
+#BLUE='\e[1;34m'
+#PURPLE='\e[1;35m'
 CYAN='\e[1;36m'
 DEFAULT_COLOR='\e[0m'
 PADDING='   '
@@ -96,13 +100,15 @@ is_digit() {
 
 # Checks if a Docker container is running
 docker_container_is_running() {
-    local status=$(docker container inspect --format='{{.State.Status}}' "$1" 2>/dev/null)
+    local status
+    status=$(docker container inspect --format='{{.State.Status}}' "$1" 2>/dev/null)
     [[ $status = 'running' ]]
 }
 
 # Checks if a Docker container is stopped
 docker_container_is_stopped() {
-    local status=$(docker container inspect --format='{{.State.Status}}' "$1" 2>/dev/null)
+    local status
+    status=$(docker container inspect --format='{{.State.Status}}' "$1" 2>/dev/null)
     [[ $status = 'exited' ]]
 }
 
@@ -174,8 +180,9 @@ list_docker_info() {
     echo
 }
 
+# Run the container with specified directory to mount and user permissions
 run_container() {
-    local dir_to_mount=$1
+    local dir_to_mount=$1 root=$2
 
     # before running the container again, it needs to be removed
     remove_container
@@ -190,13 +197,16 @@ run_container() {
     echo "$0"
     message "Starting the '$CONTAINER_NAME' container..."
     local parameters=${CONTAINER_PARAMETERS//'{DIR_TO_MOUNT}'/$dir_to_mount}
+    if [[ $root != 'root' ]]; then
+        parameters="$NEWLINE       --user $(id -u):$(id -g)$parameters"
+    fi
     message "docker --log-level=$LOG_LEVEL run $parameters       --name '$CONTAINER_NAME' '$IMAGE_NAME'"
     docker "--log-level=$LOG_LEVEL" run $parameters --name "$CONTAINER_NAME" "$IMAGE_NAME"
 }
 
-# Run the container using the requested example directory
+# Run the container using the requested example number
 run_example() {
-    local example_number=${1:-1}
+    local example_number=${1:-1} root=$2
     if [[ ! $example_number =~ ^[1-9]$ ]]; then
         fatal_error "Example number must be between 1 and 9"
     fi
@@ -207,8 +217,7 @@ run_example() {
         fatal_error "The requested example '$example_number' is not available" \
             "Please verify that the example is implemented in the directory './example${example_number}'"
     fi
-
-    run_container "$example_dir"
+    run_container "$example_dir" "$root"
 }
 
 # Stop the container if it's currently running
@@ -274,6 +283,7 @@ Commands:
   list             List Docker information
   run              Run the default Docker container example
   run[number]      Run the example specified by [number]
+ +run[number]      Identical to 'run[number]' but with root privileges
   stop             Stop the Docker container
   restart          Restart the Docker container
   console          Open a console in the Docker container
@@ -308,7 +318,8 @@ for param in "$@"; do
 done
 
 # process each command requested by the user
-cd src
+cd "$PROJECT_DIR/src" \
+ || fatal_error "Failed to change directory to $PROJECT_DIR/src"
 while [[ $# -gt 0 ]]; do
 
     param=$1
@@ -319,20 +330,23 @@ while [[ $# -gt 0 ]]; do
         clean)
             clear_docker_resources
             ;;
-        run)
-            if [[ $# -gt 1 ]] && is_digit "$2"; then
-                shift
-                run_example $1
-            else
-                run_example
-            fi
-            ;;
-        run[0-9])
+        run | run[1-9])
+            example='1'
             if is_digit "${param#run}"; then
-                run_example ${param#run}
-            else
-                run_example
+                example="${param#run}"
+            elif [[ $param == 'run' ]] && is_digit "$2"; then
+                shift ; example=$1
             fi
+            run_example "$example"
+            ;;
+        +run | +run[1-9])
+            example='1'
+            if is_digit "${param#run}"; then
+                example="${param#run}"
+            elif [[ $param == 'run' ]] && is_digit "$2"; then
+                shift ; example=$1
+            fi
+            run_example "$example" 'root'
             ;;
         stop)
             stop_container
