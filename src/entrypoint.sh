@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/busybox sh
 # File    : entrypoint.sh
 # Brief   : Entry point script for QuickSambaServer
 # Author  : Martin Rizzo | <martinrizzo@gmail.com>
@@ -354,6 +354,13 @@ function remove_all_qftp_users() {
     done
 }
 
+#---------------------------- CONTROLLING SAMBA ----------------------------#
+
+function start_samba() {
+    local config_file=$1
+    #exec ionice -c 3 smbd "--configfile=$config_file" --foreground --no-process-group </dev/null
+    exec ionice -c 3 smbd --foreground --no-process-group </dev/null
+}
 
 #-------------------------- READING CONFIGURATION --------------------------#
 
@@ -432,19 +439,19 @@ echo "CFG_USER_LIST:"
 echo "$CFG_USER_LIST"
 echo "-----------------------------"
 
-halt
-
-message "Creating vsftpd configuration file: $VSFTPD_CONF_FILE"
-create_vsftpd_conf "$VSFTPD_CONF_FILE"
-
-message "Creating Linux users"
-create_qftp_users "$CFG_USER_LIST" "$CFG_RESOURCE_LIST"
-
-message "Starting FTP service"
-trap stop_vsftpd SIGINT SIGTERM
-start_vsftpd "$VSFTPD_CONF_FILE"
+#
+#message "Creating vsftpd configuration file: $VSFTPD_CONF_FILE"
+#create_vsftpd_conf "$VSFTPD_CONF_FILE"
+#
+#message "Creating Linux users"
+#create_qftp_users "$CFG_USER_LIST" "$CFG_RESOURCE_LIST"
 
 
-# hack
-chown $USER_NAME:$GROUP_NAME "$VSFTPD_LOG_FILE"
-chown $USER_NAME:$GORUP_NAME "$QFTP_LOG_FILE"
+#halt
+message "Starting SAMBA service"
+start_samba "$SAMBA_CONF_FILE"
+
+
+## hack
+#chown $USER_NAME:$GROUP_NAME "$VSFTPD_LOG_FILE"
+#chown $USER_NAME:$GORUP_NAME "$QFTP_LOG_FILE"

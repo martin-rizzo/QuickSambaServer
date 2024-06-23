@@ -32,33 +32,32 @@
 
 # Use Alpine Linux as the base image for lightweight containerization
 FROM alpine:3.19
-
-# Install samba
-RUN set -ex    \
- && apk update \
- && apk add --no-cache samba
-
+MAINTAINER Martin Rizzo <martinrizzo@gmail.com>
 
 # Copy project setup files to the /root directory:
 #   - lib_config.sh        : configuration reader module
+#   - lib_logfile.sh       :
 #   - lib_utils.sh         : utility functions module
 #   - entrypoint.sh        : container startup script
 WORKDIR /root
 COPY lib_config.sh lib_logfile.sh lib_utils.sh entrypoint.sh ./
 
-# Set execute permissions for scripts
-RUN chmod +x entrypoint.sh
+# 1) Install samba & tini
+# 2) Adds some aliases for convenience (useful for CLI interaction)
+# 3) Set execute permissions for scripts
+RUN set -ex \
+\
+&&  apk --no-cache --no-progress  update                        \
+&&  apk --no-cache --no-progress add samba tini                \
+\
+&&  file='/etc/profile.d/ls_aliases.sh'                        \
+&&  echo "alias ll='ls -lh --group-directories-first'" > $file \
+&&  echo "alias ll.='ls -l -d .* --color=auto'"        > $file \
+\
+&&  chmod +x entrypoint.sh
 
-## Expose Samba ports (??)
-#EXPOSE ???
-
-# Adds aliases for convenience within the container, useful for CLI interaction
-RUN echo -e \
-  "alias ll='ls -lh --group-directories-first'\nalias ll.='ls -l -d .* --color=auto'" \
-  > /etc/profile.d/ls_aliases.sh
-
-#RUN set -ex  \
-# && apk cache purge
+## Expose Samba ports
+EXPOSE 137/udp 138/udp 139 445
 
 # Define the entry point script for container startup
-ENTRYPOINT  ["/root/entrypoint.sh", "param1", "param2"]
+ENTRYPOINT ["/sbin/tini", "--", "/root/entrypoint.sh"]

@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/busybox sh
 # File    : lib_utils.sh
 # Brief   : A collection of utility functions for various tasks.
 # Author  : Martin Rizzo | <martinrizzo@gmail.com>

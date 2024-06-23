@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/busybox sh
 # File    : lib_config.sh
 # Brief   : Implements functions to read configuration files.
 # Author  : Martin Rizzo | <martinrizzo@gmail.com>

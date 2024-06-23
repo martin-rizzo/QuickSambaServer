@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/busybox sh
 # File    : lib_logfile.sh
 # Brief   : Utility functions for logging messages in shell scripts.
 # Author  : Martin Rizzo | <martinrizzo@gmail.com>
