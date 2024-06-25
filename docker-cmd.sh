@@ -46,10 +46,10 @@ IMAGE_NAME='quick-samba-server'
 IMAGE_VER='0.1'
 CONTAINER_NAME='samba-server'
 CONTAINER_PARAMETERS="
-       -e USER_ID=$(id -u)
-       -e GROUP_ID=$(id -g)
+       {--USER}
        -v {DIR_TO_MOUNT}:/appdata:Z
-       -p 21:21
+       -p 139:139
+       -p 445:445
 "
 LOG_LEVEL='debug'  # | debug | info | warn | error | fatal |
 NEWLINE='
@@ -183,23 +183,32 @@ list_docker_info() {
 # Run the container with specified directory to mount and user permissions
 run_container() {
     local dir_to_mount=$1 root=$2
+    local user_parameter user_display_name
 
-    # before running the container again, it needs to be removed
+    # set user parameters based on whether the container is run as root or not
+    if [[ $root == 'root' ]]; then
+        user_parameter="-e USER_ID=$(id -u) -e GROUP_ID=$(id -g)"
+        user_display_name='root'
+    else
+        user_parameter="--user $(id -u):$(id -g)"
+        user_display_name="user <$(id -u):$(id -g)>"
+    fi
+
+    # remove the container if it is running before starting a new one
     remove_container
 
-    # if the image does not exist, then build it from scratch
+    # build the image if it does not exist.
     if ! docker_image_exists $IMAGE_NAME ; then
         build_image
     fi
 
-    # start a new container with specified parameters
+    # start a new container with the specified parameters.
     echo
     echo "$0"
-    message "Starting the '$CONTAINER_NAME' container..."
-    local parameters=${CONTAINER_PARAMETERS//'{DIR_TO_MOUNT}'/$dir_to_mount}
-    if [[ $root != 'root' ]]; then
-        parameters="$NEWLINE       --user $(id -u):$(id -g)$parameters"
-    fi
+    message "Starting the '$CONTAINER_NAME' container as $user_display_name..."
+    local parameters=$CONTAINER_PARAMETERS
+    parameters=${parameters//'{DIR_TO_MOUNT}'/$dir_to_mount}
+    parameters=${parameters//'{--USER}'/$user_parameter}
     message "docker --log-level=$LOG_LEVEL run $parameters       --name '$CONTAINER_NAME' '$IMAGE_NAME'"
     docker "--log-level=$LOG_LEVEL" run $parameters --name "$CONTAINER_NAME" "$IMAGE_NAME"
 }
