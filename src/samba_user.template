@@ -1,0 +1,6 @@
+#
+# file: {FILENAME}
+# desc: Samba configuration for the user "{USERNAME}"
+#
+
+{RESOURCES}

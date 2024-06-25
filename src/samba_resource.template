@@ -1,0 +1,4 @@
+
+[{RESOURCE_NAME}]
+  path     = {RESOURCE_PATH}
+  comment  = {RESOURCE_COMMENT}

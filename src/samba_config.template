@@ -1,0 +1,110 @@
+[global]
+
+#== MAIN CONFIG ===========================================
+
+    ## Este nombre es el que otros equipos en la red utilizarán para
+    ## identificar y acceder al servidor Samba. Si no se establece,
+    ## por defecto tomará el nombre del host de la máquina.
+        netbios name = SAMBASERVER
+
+    ## Este nombre es usado para organizar y agrupar computadoras
+    ## en una red local, facilitando la localización y el acceso a
+    ## recursos compartidos.
+        workgroup = WORKGROUP
+
+#    ## Controla si el servidor Samba debe registrarse con los servicios
+#    ## de DNS multicast (mDNS), como Avahi.
+#    ## Permite que el servidor Samba sea descubierto por otros dispositivos
+#    ## en la red que utilizan mDNS, facilitando la detección de servicios
+#    ## y recursos compartidos.
+#        multicast dns register  = no
+
+#    ## Especifica la dirección IP de un servidor DNS al que se reenviarán
+#    ## las consultas DNS que el servidor Samba no pueda resolver localmente.
+#    ## Es útil en entornos donde el servidor Samba necesita resolver nombres
+#    ## de dominio que no están en su propia base de datos DNS.
+#        dns forwarder = 10.0.0.1
+
+#  ## bind samba services to the 10.0.0.5 address
+#        bind interfaces only = yes
+#        interfaces           = 10.0.0.5
+
+#???  ## Active Directory
+#???        server role                = active directory domain controller
+#???        winbind use default domain = yes
+#???        idmap_ldb:use rfc2307      = yes
+
+#???  ## Kerberos
+#???        realm = LOCALNET.LAN
+
+
+#== USER/GROUP CONFIG  ====================================
+
+#  ## all samba users are forced to share linux-group "samba", then:
+#  ## *files will always have permission       = 0660
+#  ## *directories will always have permission = 0770
+#        force group          = samba
+#        create mask          = 0660
+#        force create mode    = 0660
+#        directory mask       = 0770
+#        force directory mode = 0770
+
+#???        client lanman auth = Yes
+#???        map to guest  = Bad User
+#???        guest account = samba
+
+
+#== OPTIMIZATIONS  ========================================
+
+#  ## synchronizes to disk when the client sets the sync bit (slow?)
+#        strict sync = no
+#
+#  ## sync any write to disk (very slow!)
+#        sync always = yes
+#
+#  ## ?????????????
+#        socket options = TCP_NODELAY IPTOS_LOWDELAY SO_RCVBUF=65536 SO_SNDBUF=65536
+
+
+#== SECUR1TY ==============================================
+
+#  ## habilitar accesos solamente desde la red local
+#
+#        ## hosts allow      = 10.0.0.0/24
+#        hostname lookups = no
+
+#  ## deshabilitar la posibilidad de crear symlinks o hardlinks desde
+#  ## el cliente pero habilitar la posibilidad de seguir symlinks
+#
+#        unix extensions            = no
+#        #follow symlinks           = yes
+#        #allow insecure wide links = yes
+
+
+#== LOG ===================================================
+
+#   ## max 64kb per log file, then rotate
+#   ## minimo log (level =  0)
+#   ## maximo log (level = 10)
+#
+#         max log size    = 64
+#         log level       = 0 passdb:0 auth:0
+#         timestamp logs  = no
+
+
+#== ACTIVE DIRECTORY ======================================
+
+#??? [sysvol]
+#???        path = /var/lib/samba/sysvol
+#???        read only = No
+
+#??? [netlogon]
+#???        path = /var/lib/samba/sysvol/localnet.lan/scripts
+#???        read only = No
+
+
+#== USER RESOURCES ========================================
+
+#  ## load custom resources for the Windows User
+#        include = {SAMBASYS_CONFIG_DIR}/%U.conf
+
