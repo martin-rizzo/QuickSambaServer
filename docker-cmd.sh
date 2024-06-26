@@ -60,8 +60,8 @@ NEWLINE='
 RED='\e[1;31m'
 GREEN='\e[1;32m'
 YELLOW='\e[1;33m'
-#BLUE='\e[1;34m'
-#PURPLE='\e[1;35m'
+BLUE='\e[1;34m'
+PURPLE='\e[1;35m'
 CYAN='\e[1;36m'
 DEFAULT_COLOR='\e[0m'
 PADDING='   '
@@ -203,8 +203,8 @@ run_container() {
     fi
 
     # start a new container with the specified parameters.
-    echo
-    echo "$0"
+    echo -e '\n-----------------------------------------------------------'
+    echo -e "$BLUE$0"
     message "Starting the '$CONTAINER_NAME' container as $user_display_name..."
     local parameters=$CONTAINER_PARAMETERS
     parameters=${parameters//'{DIR_TO_MOUNT}'/$dir_to_mount}
@@ -290,9 +290,8 @@ Commands:
   build            Build the Docker image
   clean            Clear Docker resources
   list             List Docker information
-  run              Run the default Docker container example
-  run[number]      Run the example specified by [number]
- +run[number]      Identical to 'run[number]' but with root privileges
+  run[number]      Run the example specified by [number] as root
+  urun[number]     Run the example specified by [number] as an unprivileged user
   stop             Stop the Docker container
   restart          Restart the Docker container
   console          Open a console in the Docker container
@@ -303,8 +302,11 @@ Commands:
   To clean Docker resources:
     ./docker-cmd.sh clean
 
-  To run the Docker container with example 2:
-    ./docker-cmd.sh run2
+  To run the Docker container with the default example as root:
+    ./docker-cmd.sh run
+
+  To run the Docker container with example 2 as an unprivileged user:
+    ./docker-cmd.sh urun2
 "
 
 # check if the user requested help or the image version
@@ -341,21 +343,21 @@ while [[ $# -gt 0 ]]; do
             ;;
         run | run[1-9])
             example='1'
-            if is_digit "${param#run}"; then
-                example="${param#run}"
-            elif [[ $param == 'run' ]] && is_digit "$2"; then
-                shift ; example=$1
-            fi
-            run_example "$example"
-            ;;
-        +run | +run[1-9])
-            example='1'
-            if is_digit "${param#run}"; then
-                example="${param#run}"
+            if is_digit "${param#'run'}"; then
+                example="${param#'run'}"
             elif [[ $param == 'run' ]] && is_digit "$2"; then
                 shift ; example=$1
             fi
             run_example "$example" 'root'
+            ;;
+        urun | urun[1-9])
+            example='1'
+            if is_digit "${param#'urun'}"; then
+                example="${param#'urun'}"
+            elif [[ $param == 'urun' ]] && is_digit "$2"; then
+                shift ; example=$1
+            fi
+            run_example "$example"
             ;;
         stop)
             stop_container
