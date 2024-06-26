@@ -39,7 +39,11 @@ function validate_integer() {
 
 function run_as_user() {
     local command=$1
-    su -s /bin/sh -pc "$command" - $USER_NAME
+    if [ "$(id -u)" = "0" ]; then
+        su -s /bin/sh -pc "$command" - $USER_NAME
+    else
+        eval "$command"
+    fi
 }
 
 # Check if a file (or directory) is writable by a specified user.
@@ -127,9 +131,11 @@ function add_system_user() {
 
 # Halts the execution of the script indefinitely.
 #
-# Description:
-#   This function halts the execution of the script indefinitely by entering
-#   into an infinite loop. It can be terminated by pressing Ctrl+C.
+# Notes:
+#   This function suspends the execution of the script indefinitely.
+#   It can be useful for testing or debugging purposes, as it allows you
+#   to leave the script in a controlled state for further investigation.
+#   It can be terminated by pressing Ctrl+C.
 #
 function halt() {
     echo "The script is running. Press Ctrl+C to stop it."
@@ -138,3 +144,12 @@ function halt() {
     done
 }
 
+# Checks if the current user is the root user.
+#
+# Notes:
+#   This function checks if the ID of the current user is 0.
+#   This can be useful for code that require elevated privileges to run.
+#
+function is_root() {
+    [[ "$(id -u)" -eq 0 ]]
+}
