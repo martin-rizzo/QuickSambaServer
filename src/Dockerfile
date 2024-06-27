@@ -34,7 +34,7 @@
 FROM alpine:3.19
 MAINTAINER Martin Rizzo <martinrizzo@gmail.com>
 
-RUN mkdir -p /app /app/tmp /
+RUN mkdir -p /app /app/etc
 
 # Copy project setup files to the /app directory:
 #   - lib_config.sh   : module for reading configuration

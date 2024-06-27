@@ -45,7 +45,7 @@ unset USER_ID GROUP_ID LOG_DIR
 PROJECT_NAME=QuickSambaServer         # qss
 CONFIG_NAME=samba.config              # qss config file
 QSERVER_USER=qserver                  # qss main user & group
-QSERVER_VUSER_TAG=__QSERVER-VUSER__   # qss virtual user tag
+QSERVER_VUSER_TAG=__QSERVER_VUSER__   # qss virtual user tag
 SCRIPT_DIR=$(dirname "$0")
 
 APP=$SCRIPT_DIR
@@ -59,11 +59,10 @@ RUN_DIR=/run
 QSERVER_CONFIG_FILE="$APPDATA/$CONFIG_NAME"
 QSERVER_LOG_DIR="$APPDATA/$QSERVER_LOG_DIR"
 QSERVER_LOG_FILE="$QSERVER_LOG_DIR/quicksambaserver.log"
-QSERVER_TEMP_DIR="$APP/tmp"
-
 
 # SAMBA FILES & DIRS
-SAMBA_CONF_FILE="$QSERVER_TEMP_DIR/samba.config"
+SAMBA_CONF_DIR="$APP/etc"
+SAMBA_CONF_FILE="$SAMBA_CONF_DIR/smb.conf"
 SAMBA_LOG_FILE="$LOG_DIR/samba.log"
 PID_FILE="$RUN_DIR/samba.pid"
 
@@ -77,8 +76,7 @@ CFG_RESOURCE_LIST=
 
 
 
-
-#---------------------------------- USERS ----------------------------------#
+#================================== USERS ==================================#
 
 # Ensure the existence of the main qserver user and group.
 #
@@ -86,16 +84,16 @@ CFG_RESOURCE_LIST=
 #   ensure_qserver_user_and_group
 #
 # Description:
-#   If the QSERVER_USER_ID and QSERVER_GROUP_ID do not exist, it creates them
-#   using the provided IDs and names.
+#   If the QSERVER_USER_ID and QSERVER_GROUP_ID do not exist,
+#   it creates them using the provided IDs and names.
 #
 # Output Globals:
 #   QSERVER_USER  : The name of the main quickserver user.
 #   QSERVER_GROUP : The name of the main quickserver group.
 #
-function ensure_qserver_user_and_group() {
+ensure_qserver_user_and_group() {
     local user_name=$1 user_id=$2 group_name=$3 group_id=$4
-    message {
+    message '{'
 
     # create 'group_id' if it don't exist
     if ! getent group $group_id $>/dev/null; then
@@ -114,184 +112,192 @@ function ensure_qserver_user_and_group() {
         user_name=$(getent passwd $user_id | cut -d: -f1)
     fi
     QSERVER_USER=$user_name
-    message }
+    message '}'
 }
 
-# Create virtual FTP users and associate them with specified resources.
+# Add a Samba virtual user
 #
 # Usage:
-#   create_virtual_user <user_name> <user_pass> <user_resources> <resource_list> [options]
-#
-# Parameters:
-#   - user_name      : Username for the virtual FTP user.
-#   - user_pass      : Password for the virtual FTP user.
-#   - user_resources : Comma-separated list of resources to associate with the user.
-#   - resource_list  : List of available resources. Each line should be formatted as
-#                      "resname|resdir|text"
-#   - options        : Comma-separated list of options for additional configurations.
-#
-# Globals:
-#   DIRS_TO_VERIFY : Directories of the created virtual user are appended to
-#                    this list to verify them during post-processing.
-# Example:
-#   create_virtual_user "john" "pass123" "res1,res2" "$RESOURCE_LIST" sys_user,writable_is_fatal
-#
-# Notes:
-#   - If 'sys_user' option is provided, the script will create a system user with
-#     the given username and password.
-#   - If 'writable_is_fatal' option is provided, any attempt to create a virtual
-#     userwith a writable home directory will result in a fatal error.
-#   - Every resource listed in 'user_resources' must exist in the 'resource_list'.
-#   - Each virtual user can only be associated with one resource. If a user is
-#     assigned multiple resources, an error will be generated.
-#
-function create_virtual_user() {
-    local user_name=$1 user_pass=$2 user_resources=$3 resource_list=$4 options=$5
-    local chpasswd_message resource_values resdir home_dir writable_is_fatal
-
-    # loop a travez de las opciones suministradas
-    IFS=',' ; for opt in $options; do
-        case $opt in
-
-            # sys_user -> create user and set password
-            sys_user)
-                add_system_user "$user_name" "$GROUP_NAME" '/home' "$QFTP_USER_TAG"
-                chpasswd_message=$(echo "$user_name:$user_pass" | chpasswd 2>&1)
-                echo "      - $chpasswd_message"
-                ;;
-
-            # writable_is_fatal -> fatal error if the home directory is writable
-            writable_is_fatal)
-                writable_is_fatal=true
-                ;;
-
-        esac
-    done
-
-    # loop through user resources.
-    IFS=',' ; for resource in $user_resources; do
-
-        # get resource info
-        resource_values=$(find_config_values "$resource" "$resource_list")
-        [[ -z "$resource_values" ]] && \
-            fatal_error "Resource '$resource' was not defined" \
-                        "Please review the $CONFIG_NAME file"
-        resdir=$(echo "$resource_values" | cut -d '|' -f 2)
-        [[ -z "$resdir" ]] && \
-            fatal_error "Resource '$resource' does not have an associated directory" \
-                        "Please review the $CONFIG_NAME file"
-
-        # define the home directory for the user based on the resource directory
-        home_dir="$APPDATA_DIR/$resdir"
-        [[ ! -d "$home_dir" ]] && \
-            fatal_error "Directory '$resdir' associated with resource '$resource' does not exist." \
-                        "Please review the $CONFIG_NAME file."
-
-        [[ -e "/$VIRTUAL_USERS_DIR/$user_name" ]] && \
-            fatal_error "El usuario '$user_name' tiene mas de un recurso asignado" \
-                        "Please review the $CONFIG_NAME file."
-
-        # link the user's home directory
-        ln -s "$home_dir" "/$VIRTUAL_USERS_DIR/$user_name"
-
-        # add the directory to the list
-        # (if 'writable_is_fatal' then prefix it with '!')
-        [[ "$writable_is_fatal" == true ]] && home_dir="!${home_dir}"
-        DIRS_TO_VERIFY="${DIRS_TO_VERIFY}:${home_dir}"
-
-    done
-}
-
-
-# Create QuickFtpServer users based on the provided user list.
-# (users are created as system users to be read by vsftpd via PAM)
-#
-# Usage:
-#   create_qftp_users <user_list> <resource_list>
-#
-# Parameters:
-#   - user_list     : List of users to be created. Each line should be formatted as
-#                     "username|password|resource"
-#   - resource_list : List of available resources. Each line should be formatted as
-#                     "resname|resdir|text".
-# Example:
-#   create_qftp_users "$CFG_USER_LIST" "$CFG_RESOURCE_LIST"
-#
-# Notes:
-#   - If a user already exists in the system, an error will be generated.
-#   - All created users can be removed with the function remove_all_qftp_users.
-#
-function create_qftp_users() {
-    local user_list=$1 resource_list=$2
-
-    DIRS_TO_VERIFY=
-
-    # iterate over each line of the user list
-    echo "$user_list" > $TEMP_FILE
-    while IFS='|' read -r user_name user_pass user_resources;
-    do
-
-        # skip if the username is empty
-        [[ -z "$user_name" ]] && continue
-
-        # create the virtual user and associate it with its resources
-        # (the 'ftp' user is the anonymous user and doesn't need a system user)
-        if [[ "$user_name" == ftp ]]; then
-            create_virtual_user "$user_name" "$user_pass" "$user_resources" "$resource_list" writable_is_fatal
-        else
-            create_virtual_user "$user_name" "$user_pass" "$user_resources" "$resource_list" sys_user
-        fi
-
-    done < $TEMP_FILE
-    rm $TEMP_FILE
-
-    verify_read_only_directories "$DIRS_TO_VERIFY" "$MAIN_USER" "$CFG_FIX_WRITABLE_ROOT"
-
-}
-
-# Remove all QuickFtpServer users from the system.
-#
-# Usage:
-#   remove_all_qftp_users
+#   add_samba_vuser <username> <password>
 #
 # Description:
-#   This function removes all users previously created for vsftpd.
-#   It searches for users with the specified tag in the '/etc/passwd'
-#   file and removes them.
+#   This function adds a new Samba virtual user.
+#   If the user already exists, an error message is displayed and the script exits.
 #
 # Example:
-#   remove_all_qftp_users
+#   add_samba_vuser user1 password123
 #
-function remove_all_qftp_users() {
-    local qftp_users=$(grep "$QFTP_USER_TAG" /etc/passwd)
+add_samba_vuser() {
+    local username=$1 password=$2
 
-    # iterate over each linux user entry
-    echo "$qftp_users" | \
-    while IFS=':' read -r name pass uid gid gecos home shell
-    do
-        # check if the user entry matches the qftp user tag
-        if [[ "$gecos" == "$QFTP_USER_TAG" ]]; then
-            message "Removing old user: $name"
-            deluser "$name" $>/dev/null
-        fi
-    done
-}
+    # register user in the system (only if user do not already exist)
+    if ! user_exists "$username"; then
+        echo "$username:x:$QSERVER_USER_ID:$QSERVER_GROUP_ID:$QSERVER_VUSER_TAG:/home:/sbin/nologin" >> /etc/passwd
+    else
+        fatal_error "The user $username already exists in the system"
+    fi
 
-#---------------------------- CONTROLLING SAMBA ----------------------------#
-
-TEMP_USERID=9876
-
-add_samba_user() {
-    username=$1 password=$2
-
-    adduser "$username" -D -H -g 'Samba User' -s /sbin/nologin -u "$TEMP_USERID"
-    echo "$username:$password" | chpasswd
-    sed -i "s/:$TEMP_USERID/:1001/g" /etc/passwd
-    sed -i "/\:$TEMP_USERID:/d" /etc/group
-
+    # register user in Samba
     echo -e "$password\n$password" | smbpasswd -a -c "$SAMBA_CONF_FILE" -s "$username"
-    echo "Usuario de Samba creado: $username"
+    echo "Samba virtual user created: $username"
 }
+
+# Remove all Samba virtual users
+#
+# Usage:
+#   remove_all_samba_vusers
+#
+# Description:
+#   This function removes all users previously created with 'add_samba_vuser()'
+#
+remove_all_samba_vusers() {
+
+    # remove all users from the Samba registry
+    # shellcheck disable=2034
+    pdbedit --configfile="$SAMBA_CONF_FILE" --list | \
+    while IFS=':' read -r username more; do
+        echo "Removing Samba user $username"
+        pdbedit --configfile="$SAMBA_CONF_FILE" --delete --user="$username"
+    done
+
+    # remove virtual users from the system
+    sed -i "/$QSERVER_VUSER_TAG/d" /etc/passwd
+}
+
+
+# # Create virtual FTP users and associate them with specified resources.
+# #
+# # Usage:
+# #   create_virtual_user <user_name> <user_pass> <user_resources> <resource_list> [options]
+# #
+# # Parameters:
+# #   - user_name      : Username for the virtual FTP user.
+# #   - user_pass      : Password for the virtual FTP user.
+# #   - user_resources : Comma-separated list of resources to associate with the user.
+# #   - resource_list  : List of available resources. Each line should be formatted as
+# #                      "resname|resdir|text"
+# #   - options        : Comma-separated list of options for additional configurations.
+# #
+# # Globals:
+# #   DIRS_TO_VERIFY : Directories of the created virtual user are appended to
+# #                    this list to verify them during post-processing.
+# # Example:
+# #   create_virtual_user "john" "pass123" "res1,res2" "$RESOURCE_LIST" sys_user,writable_is_fatal
+# #
+# # Notes:
+# #   - If 'sys_user' option is provided, the script will create a system user with
+# #     the given username and password.
+# #   - If 'writable_is_fatal' option is provided, any attempt to create a virtual
+# #     userwith a writable home directory will result in a fatal error.
+# #   - Every resource listed in 'user_resources' must exist in the 'resource_list'.
+# #   - Each virtual user can only be associated with one resource. If a user is
+# #     assigned multiple resources, an error will be generated.
+# #
+# function create_virtual_user() {
+#     local user_name=$1 user_pass=$2 user_resources=$3 resource_list=$4 options=$5
+#     local chpasswd_message resource_values resdir home_dir writable_is_fatal
+#
+#     # loop a travez de las opciones suministradas
+#     IFS=',' ; for opt in $options; do
+#         case $opt in
+#
+#             # sys_user -> create user and set password
+#             sys_user)
+#                 add_system_user "$user_name" "$GROUP_NAME" '/home' "$QFTP_USER_TAG"
+#                 chpasswd_message=$(echo "$user_name:$user_pass" | chpasswd 2>&1)
+#                 echo "      - $chpasswd_message"
+#                 ;;
+#
+#             # writable_is_fatal -> fatal error if the home directory is writable
+#             writable_is_fatal)
+#                 writable_is_fatal=true
+#                 ;;
+#
+#         esac
+#     done
+#
+#     # loop through user resources.
+#     IFS=',' ; for resource in $user_resources; do
+#
+#         # get resource info
+#         resource_values=$(find_config_values "$resource" "$resource_list")
+#         [[ -z "$resource_values" ]] && \
+#             fatal_error "Resource '$resource' was not defined" \
+#                         "Please review the $CONFIG_NAME file"
+#         resdir=$(echo "$resource_values" | cut -d '|' -f 2)
+#         [[ -z "$resdir" ]] && \
+#             fatal_error "Resource '$resource' does not have an associated directory" \
+#                         "Please review the $CONFIG_NAME file"
+#
+#         # define the home directory for the user based on the resource directory
+#         home_dir="$APPDATA_DIR/$resdir"
+#         [[ ! -d "$home_dir" ]] && \
+#             fatal_error "Directory '$resdir' associated with resource '$resource' does not exist." \
+#                         "Please review the $CONFIG_NAME file."
+#
+#         [[ -e "/$VIRTUAL_USERS_DIR/$user_name" ]] && \
+#             fatal_error "El usuario '$user_name' tiene mas de un recurso asignado" \
+#                         "Please review the $CONFIG_NAME file."
+#
+#         # link the user's home directory
+#         ln -s "$home_dir" "/$VIRTUAL_USERS_DIR/$user_name"
+#
+#         # add the directory to the list
+#         # (if 'writable_is_fatal' then prefix it with '!')
+#         [[ "$writable_is_fatal" == true ]] && home_dir="!${home_dir}"
+#         DIRS_TO_VERIFY="${DIRS_TO_VERIFY}:${home_dir}"
+#
+#     done
+# }
+
+
+# # Create QuickFtpServer users based on the provided user list.
+# # (users are created as system users to be read by vsftpd via PAM)
+# #
+# # Usage:
+# #   create_qftp_users <user_list> <resource_list>
+# #
+# # Parameters:
+# #   - user_list     : List of users to be created. Each line should be formatted as
+# #                     "username|password|resource"
+# #   - resource_list : List of available resources. Each line should be formatted as
+# #                     "resname|resdir|text".
+# # Example:
+# #   create_qftp_users "$CFG_USER_LIST" "$CFG_RESOURCE_LIST"
+# #
+# # Notes:
+# #   - If a user already exists in the system, an error will be generated.
+# #   - All created users can be removed with the function remove_all_qftp_users.
+# #
+# function create_qftp_users() {
+#     local user_list=$1 resource_list=$2
+#
+#     DIRS_TO_VERIFY=
+#
+#     # iterate over each line of the user list
+#     echo "$user_list" > $TEMP_FILE
+#     while IFS='|' read -r user_name user_pass user_resources;
+#     do
+#
+#         # skip if the username is empty
+#         [[ -z "$user_name" ]] && continue
+#
+#         # create the virtual user and associate it with its resources
+#         # (the 'ftp' user is the anonymous user and doesn't need a system user)
+#         if [[ "$user_name" == ftp ]]; then
+#             create_virtual_user "$user_name" "$user_pass" "$user_resources" "$resource_list" writable_is_fatal
+#         else
+#             create_virtual_user "$user_name" "$user_pass" "$user_resources" "$resource_list" sys_user
+#         fi
+#
+#     done < $TEMP_FILE
+#     rm $TEMP_FILE
+#
+#     verify_read_only_directories "$DIRS_TO_VERIFY" "$MAIN_USER" "$CFG_FIX_WRITABLE_ROOT"
+#
+# }
+
+#====================== BUILDING SAMBA CONFIGURATION =======================#
 
 # Create the samba configuration file from the template.
 #
@@ -308,37 +314,49 @@ build_samba_conf() {
     [[ -z   "$output_file"   ]] && fatal_error "build_samba_conf() requires a parameter with the output file"
     [[ ! -f "$template_file" ]] && fatal_error "build_samba_conf() requires the file $PWD/$template_file"
 
-    print_template "$(cat "$template_file")"                          \
-        "{MAIN_USER_NAME}"    "$USER_NAME"                            \
-        "{MAIN_GROUP_NAME}"   "$GROUP_NAME"                           \
+    print_template "$(cat "$template_file")"    \
+        "{SAMBA_CONF_FILE}"   "$SAMBA_CONF_DIR" \
+        "{MAIN_USER_NAME}"    "$USER_NAME"      \
+        "{MAIN_GROUP_NAME}"   "$GROUP_NAME"     \
         > "$output_file"
 }
 
+build_resource_conf() {
+    local name=$1 directory=$2 comment=$3
+    local path output_file
+    path="$APPDATA/$directory"
 
-
-start_samba() {
-    #exec ionice -c 3 smbd "--configfile=$config_file" "--option=log file=/appdata/log/samba-orig.log" --foreground --no-process-group </dev/null
-#     exec ionice -c 3 smbd "--configfile=$config_file" "--log-basename=/appdata/log" \
-#          "--option=lock directory=/appdata/lock" \
-#          "--option=winbindd socket directory=/appdata/sock" \
-#          --debuglevel=0 --debug-stdout --foreground  --no-process-group  </dev/null
-
-#        "--log-basename=/appdata/log" \
-
-    exec ionice -c 3 smbd \
-        "--configfile=$SAMBA_CONF_FILE" \
-        --debuglevel=0 --debug-stdout --foreground --no-process-group  </dev/null
+    echo "Building resource $name"
+    output_file="$SAMBA_CONF_DIR/resource-$name.conf"
+    print_template "$(cat 'samba_resource.template')" \
+        "{RESOURCE_NAME}"    "$name"     \
+        "{RESOURCE_PATH}"    "$path"     \
+        "{RESOURCE_COMMENT}" "$comment"  \
+        > "$output_file"
 }
 
-#-------------------------- READING CONFIGURATION --------------------------#
+build_user_conf() {
+    local username=$1 password=$2 resources=$3
 
-function process_config_var() {
+    add_samba_vuser "$username" "$password"
+
+    output_file="$SAMBA_CONF_DIR/$username.conf"
+    rm -f "$output_file"
+    for name in ${resources//,/ } ; do
+        cat "$SAMBA_CONF_DIR/resource-$name.conf" >> "$output_file"
+    done
+    echo >> "$output_file"
+}
+
+#========================== READING CONFIGURATION ==========================#
+
+process_config_var() {
     local varname=$1 value=$2
     local ERROR=1
 
     case $varname in
         RESOURCE)
-            value=$(format_value "$value" name dir txt) || return $ERROR
+            value=$(format_value "$value" name reldir txt) || return $ERROR
             CFG_RESOURCE_LIST="${CFG_RESOURCE_LIST}${value}$NEWLINE"
             ;;
         USER)
@@ -351,7 +369,6 @@ function process_config_var() {
     esac
 }
 
-
 #===========================================================================#
 # ///////////////////////////////// MAIN ////////////////////////////////// #
 #===========================================================================#
@@ -361,6 +378,11 @@ source "$SCRIPT_DIR/lib_config.sh"  # functions for reading config files
 source "$SCRIPT_DIR/lib_logfile.sh" # functions for handling logging messages
 source "$SCRIPT_DIR/lib_utils.sh"   # miscellaneous utility functions
 
+start_samba() {
+    exec ionice -c 3 smbd \
+        --configfile="$SAMBA_CONF_FILE" \
+        --debuglevel=0 --debug-stdout --foreground --no-process-group </dev/null
+}
 
 echo -e '\n-----------------------------------------------------------'
 echo -e "$BLUE$0"
@@ -404,14 +426,23 @@ echo "CFG_USER_LIST:"
 echo "$CFG_USER_LIST"
 echo "-----------------------------"
 
-
+# creando configuracion principal de samba
 message "Generando configuracion"
-#mkdir -p "$QSERVER_TEMP_DIR" \
-# || fatal_error "Failed al crear el directorio $QSERVER_TEMP_DIR"
 build_samba_conf "$SAMBA_CONF_FILE"
 
-add_samba_user alice alice
-add_samba_user bob   bob
+
+# creando configuracion para cada recurso
+echo "$CFG_RESOURCE_LIST" | \
+while IFS='|' read -r name directory comment; do
+    [[ $name ]] && build_resource_conf "$name" "$directory" "$comment"
+done
+
+# creando configuracion para cada usuario
+echo "$CFG_USER_LIST" | \
+while IFS='|' read -r username password resources; do
+    [[ $username ]] && build_user_conf "$username" "$password" "$resources"
+done
+
 
 
 #

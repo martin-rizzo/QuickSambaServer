@@ -144,8 +144,14 @@ function format_value() {
                 param=$(echo "$param" | sed 's/ //g')
                 ;;
 
-            # directory - (remove leading and trailing slashes)
+            # directory - (remove trailing slashes)
             dir)
+                param=${param%/}
+                ;;
+
+            # relative directory - (remove leading and trailing slashes)
+            reldir)
+                param=${param#./}
                 param=${param#/}
                 param=${param%/}
                 ;;

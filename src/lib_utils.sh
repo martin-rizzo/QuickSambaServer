@@ -104,7 +104,7 @@ function print_template() {
 # Example:
 #   add_system_user "john_doe:1001" "developers" "/home/john_doe" __dev_tag__
 #
-function add_system_user() {
+add_system_user() {
     local user_name=$1 group_name=$2 home_dir=$3 tag=$4
     local user_id
 
@@ -127,6 +127,25 @@ function add_system_user() {
     else
         adduser "$user_name" -D -H -G "$group_name" -h "$home_dir" -g "$tag" -s /sbin/nologin
     fi
+}
+
+# Check if a Linux user account exists within the docker container.
+#
+# Usage:
+#   user_exists <user_name>
+#
+# Parameters:
+#   - user_name  : The username to check for existence in the system.
+#
+# Example:
+#   if user_exists "john_doe"; then
+#       echo "User john_doe exists"
+#   fi
+#
+user_exists() {
+    local user_name=$1
+    [[ -z "$user_name" ]] && fatal_error "user_exists() requires a parameter with a user name"
+    id "$user_name" &>/dev/null
 }
 
 # Halts the execution of the script indefinitely.
