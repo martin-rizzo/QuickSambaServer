@@ -31,20 +31,23 @@
 #     SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 HELP="
-Usage: $0 user:password@host
+Usage: $0 user:password[@host]
 
 Test the Samba server by checking port connectivity and attempting a connection.
+
+Parameters:
+  user:password[@host]
+      Specify the username, password, and optionally the host to test.
+      If the host is not provided, the script will use the default host.
+      (you can use a single dash '-' to run the script with default test values)
 
 The script performs the following actions:
   1. Checks if Samba-related ports on the specified host are open and accessible.
   2. Attempts to establish a Samba connection using the provided credentials.
 
-Parameters:
-  user:password@host  Specify the username, password, and host to test
-  You can use a single dash '-' to run the script with default test values.
-
 Examples:
   $0 -
+  $0 bob:password
   $0 john:doe@192.168.1.100
   $0 alice:secret@fileserver.local
 "
@@ -55,7 +58,7 @@ RED='\033[0;31m'
 NC='\033[0m' # no Color
 
 
-#--------------------------------- HELPERS ---------------------------------#
+#================================= HELPERS =================================#
 
 # Print help
 display_help() {
@@ -68,7 +71,7 @@ local_ip_addresses() {
 }
 
 
-#------------------------ SAMBA CHECKING FUNCTIONS -------------------------#
+#======================== SAMBA CHECKING FUNCTIONS =========================#
 
 # Function to check Samba ports
 check_samba_ports() {
@@ -87,23 +90,21 @@ check_samba_ports() {
 
 # Function to connect and list Samba resources
 list_samba_resources() {
-    local host=$1
-    local username=$2
-    local password=$3
+    local username=$1 password=$2 host=$3
 
-    echo "Attempting to connect to Samba on $host..."
+    echo -ne "Attempting to connect to Samba on $host...\r"
 
     # use smbclient to list resources
     output=$(smbclient -L "$host" -U "$username%$password" 2>&1)
 
     if [ $? -eq 0 ]; then
-        echo "Connection successful. Available resources:"
+        echo -e "\033[K[$host] Available resources for $username:"
         echo "$output" | grep -E "Disk|Printer"
     else
         echo "Failed to connect: $output"
     fi
+    echo
 }
-
 
 #===========================================================================#
 # ///////////////////////////////// MAIN ////////////////////////////////// #
@@ -117,14 +118,19 @@ fi
 
 # check if the argument is a dash "-"
 if [[ $1 == "-" ]]; then
-    USER="alice"
-    PASSWORD="alice"
+    USER_NAME=
+    # shellcheck disable=2207
+    HOST_LIST=( $(local_ip_addresses) )
+
+# validate the "user:pass" format
+elif [[ "$1" =~ ^[^:]+:[^@]+$ ]]; then
+    IFS=':' read -r USER_NAME PASSWORD <<< "$1"
     # shellcheck disable=2207
     HOST_LIST=( $(local_ip_addresses) )
 
 # validate the "user:pass@host" format
 elif [[ "$1" =~ ^[^:]+:[^@]+@[^@]+$ ]]; then
-    IFS=':@' read -r USER PASSWORD HOST <<< "$1"
+    IFS=':@' read -r USER_NAME PASSWORD HOST <<< "$1"
     HOST_LIST=( "$HOST" )
 
 # the parameter format does not seem to be correct, print help
@@ -133,12 +139,18 @@ else
     exit 1
 fi
 
+# display the status of the ports bound to Samba
 echo
 echo "Checking Samba Service"
 for host in "${HOST_LIST[@]}"; do
     check_samba_ports "$host"
 done
 echo
-list_samba_resources "${HOST_LIST[0]}" "$USER" "$PASSWORD"
 
-
+# display the available resources for USER_NAME:PASSWORD
+if [[ -n "$USER_NAME" ]]; then
+    list_samba_resources "$USER_NAME" "$PASSWORD" "${HOST_LIST[0]}"
+else
+    list_samba_resources 'alice' 'alice' "${HOST_LIST[0]}"
+    list_samba_resources 'bob'   'bob'   "${HOST_LIST[0]}"
+fi
