@@ -34,30 +34,39 @@
 FROM alpine:3.19
 MAINTAINER Martin Rizzo <martinrizzo@gmail.com>
 
-# Copy project setup files to the /root directory:
-#   - lib_config.sh        : configuration reader module
-#   - lib_logfile.sh       :
-#   - lib_utils.sh         : utility functions module
-#   - entrypoint.sh        : container startup script
-WORKDIR /root
-COPY lib_config.sh lib_logfile.sh lib_utils.sh entrypoint.sh ./
+RUN mkdir -p /app /app/tmp /
 
-# 1) Install samba & tini
-# 2) Adds some aliases for convenience (useful for CLI interaction)
-# 3) Set execute permissions for scripts
+# Copy project setup files to the /app directory:
+#   - lib_config.sh   : module for reading configuration
+#   - lib_logfile.sh  : module to facilitate log file management
+#   - lib_utils.sh    : module with helper functions
+#   - entrypoint.sh   : container startup script
+#   - *.template      : templates used to generate configuration
+WORKDIR /app
+COPY                         \
+  lib_config.sh              \
+  lib_logfile.sh             \
+  lib_utils.sh               \
+  entrypoint.sh              \
+  samba_config.template      \
+  samba_resource.template    \
+  samba_resource_ro.template \
+  samba_user.template        \
+  ./
+
+# Add additional commands to the profile (useful for CLI interaction)
+COPY profile.sh /etc/profile.d/ls_aliases.sh
+
+# Install samba & tini
+# Set execute permissions for scripts
 RUN set -ex \
-\
-&&  apk --no-cache --no-progress  update                        \
-&&  apk --no-cache --no-progress add samba tini                \
-\
-&&  file='/etc/profile.d/ls_aliases.sh'                        \
-&&  echo "alias ll='ls -lh --group-directories-first'" > $file \
-&&  echo "alias ll.='ls -l -d .* --color=auto'"        > $file \
-\
-&&  chmod +x entrypoint.sh
+ &&  apk --no-cache --no-progress update          \
+ &&  apk --no-cache --no-progress add samba tini  \
+ &&  chmod 755 /app                               \
+ &&  chmod +x  /app/entrypoint.sh
 
 ## Expose Samba ports
 EXPOSE 137/udp 138/udp 139 445
 
 # Define the entry point script for container startup
-ENTRYPOINT ["/sbin/tini", "--", "/root/entrypoint.sh"]
+ENTRYPOINT ["/sbin/tini", "--", "/app/entrypoint.sh"]

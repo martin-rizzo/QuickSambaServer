@@ -30,28 +30,45 @@
 #     TORT OR OTHERWISE, ARISING FROM,OUT OF OR IN CONNECTION WITH THE
 #     SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
-
+#
+# variables configurables:
+#  - USER_ID
+#  - GROUP_ID
+#  - LOG_DIR
+#
+QSERVER_USER_ID=${USER_ID:-$(id -u)}
+QSERVER_GROUP_ID="${GROUP_ID:-$(id -g)}"
+QSERVER_LOG_DIR="${LOG_DIR:-log}"
+unset USER_ID GROUP_ID LOG_DIR
 
 # CONSTANTS
 PROJECT_NAME=QuickSambaServer         # qss
 CONFIG_NAME=samba.config              # qss config file
 QSERVER_USER=qserver                  # qss main user & group
 QSERVER_VUSER_TAG=__QSERVER-VUSER__   # qss virtual user tag
-
-# DIRECTORIES
-SAMBA_CONF_DIR=/etc/samba
-APPDATA_DIR=/appdata
-RUN_DIR=/run
-LOG_DIR="$APPDATA_DIR/${LOG_DIR:-log}"
 SCRIPT_DIR=$(dirname "$0")
-DEFAULT_HOME_DIR=/home
 
-# FILES
-QSERVER_CONFIG_FILE="$APPDATA_DIR/$CONFIG_NAME"
-QSERVER_LOG_FILE="$LOG_DIR/quicksambaserver.log"
-SAMBA_CONF_FILE="$SAMBA_CONF_DIR/samba.conf"
+APP=$SCRIPT_DIR
+APPDATA=/appdata
+RUN_DIR=/run
+
+
+
+
+# QSERVER FILES & DIRS
+QSERVER_CONFIG_FILE="$APPDATA/$CONFIG_NAME"
+QSERVER_LOG_DIR="$APPDATA/$QSERVER_LOG_DIR"
+QSERVER_LOG_FILE="$QSERVER_LOG_DIR/quicksambaserver.log"
+QSERVER_TEMP_DIR="$APP/tmp"
+
+
+# SAMBA FILES & DIRS
+SAMBA_CONF_FILE="$QSERVER_TEMP_DIR/samba.config"
 SAMBA_LOG_FILE="$LOG_DIR/samba.log"
 PID_FILE="$RUN_DIR/samba.pid"
+
+
+# FILES
 TEMP_FILE=$(mktemp /tmp/tempfile.XXXXXX)
 
 # CONFIG VARS
@@ -59,101 +76,7 @@ CFG_USER_LIST=
 CFG_RESOURCE_LIST=
 
 
-# Verify the permissions of dirs to ensure they are read-only for the given user.
-#
-# Usage:
-#   verify_read_only_directories <directories> <user> <fix_writable_dir>
-#
-# Parameters:
-#   - directories      : Colon-separated list of directories to be verified.
-#   - user             : Username of the user whose permissions are being verified.
-#   - fix_writable_dir : Flag to force directories to be read-only to prevent a fatal error.
-#
-# Example:
-#   verify_read_only_directories "/path/to/dir1:/path/to/dir2" "john" true
-#
-# Notes:
-#   - If a directory path is prefixed with '!', it signifies that a fatal error
-#     will occur if the directory is not read-only. Otherwise, only a warning
-#     is displayed.
-#
-function verify_read_only_directories() {
-    local directories=$1 user=$2 fix_writable_dir=$3
-    local writable_directory_action # 'fatal_error' | 'warning' | 'make_readonly' | 'ignore' #
 
-    IFS=':' ; for directory in $directories ; do
-        [[ -z "$directory" ]] && continue
-
-        # at this point, the directory is writable and some action needs to be taken
-        # (by default, only a warning will be displayed)
-        writable_directory_action='warning'
-
-        # if the directory is prefixed with '!', then there will be a fatal error.
-        if [[ "$directory" == '!'* ]]; then
-            directory="${directory#!}"
-            writable_directory_action='fatal_error'
-
-            # try to avoid the fatal error if the user wants the fix
-            if [[ "$fix_writable_dir" == true ]]; then
-                writable_directory_action='make_readonly'
-            fi
-        fi
-
-        # if the directory writable -> perform the corresponding action.
-        if is_writable "$directory" "$user"; then
-            case "$writable_directory_action" in
-                ignore)
-                    # do nothing
-                    ;;
-                warning)
-                    warning "Directory '$directory' is writable and potentially unsafe"
-                    ;;
-                fatal_error)
-                    fatal_error "Directory '$directory' must be read-only" \
-                                "Use 'FORCE_ANON_READONLY=YES' or manually modify the permissions"
-                    ;;
-                make_readonly)
-                    message "Forcing directory '$directory' to be read-only"
-                    chmod a-w "$directory"
-                    if is_writable "$directory" "$user"; then
-                        fatal_error "Unable to make directory '$directory' read-only" \
-                                    "You must manually modify the permissions"
-                    fi
-                    ;;
-            esac
-        fi
-    done
-}
-
-# Create the vsftpd configuration file from the template.
-#
-# Usage:
-#   create_vsftpd_conf <output_file> [template_file]
-#
-# Parameters:
-#   - output_file: the path to the vsftpd configuration file to be created.
-#
-# Example:
-#   create_vsftpd_conf "/etc/vsftpd.conf"
-#
-function create_vsftpd_conf() {
-    local output_file=$1 template_file=${2:-'vsftpd.conf.template'}
-    [[ -z   "$output_file"   ]] && fatal_error "create_vsftpd_conf() requires a parameter with the output file"
-    [[ ! -f "$template_file" ]] && fatal_error "create_vsftpd_conf() requires the file $PWD/$template_file"
-
-    local anon_enabled=NO fix_writable_root=NO
-    [[ "$CFG_ANON_ENABLED"      == true ]] && anon_enabled=YES
-    [[ "$CFG_FIX_WRITABLE_ROOT" == true ]] && fix_writable_root=YES
-
-    print_template "$(cat "$template_file")"                          \
-        "{MAIN_USER_NAME}"    "$USER_NAME"                            \
-        "{MAIN_GROUP_NAME}"   "$GROUP_NAME"                           \
-        "{VSFTPD_LOG_FILE}"   "$VSFTPD_LOG_FILE"                      \
-        "{ANON_ENABLED}"      "$anon_enabled"                         \
-        "{ANON_HOME}"         "$VIRTUAL_USERS_DIR/$ANON_VIRTUAL_USER" \
-        "{FIX_WRITABLE_ROOT}" "$fix_writable_root"                    \
-        > "$output_file"
-}
 
 #---------------------------------- USERS ----------------------------------#
 
@@ -171,7 +94,7 @@ function create_vsftpd_conf() {
 #   QSERVER_GROUP : The name of the main quickserver group.
 #
 function ensure_qserver_user_and_group() {
-    local user_name=$1 user_id=$2 group_name=$3 group_id=$4 home_dir=$5
+    local user_name=$1 user_id=$2 group_name=$3 group_id=$4
     message {
 
     # create 'group_id' if it don't exist
@@ -186,7 +109,7 @@ function ensure_qserver_user_and_group() {
     # create 'user_id' if it don't exist
     if ! getent passwd "$user_id" &>/dev/null; then
         message "creating system user  : $user_name [$user_id]"
-        add_system_user "$user_name:$user_id" "$group_name" "$home_dir" "$PROJECT_NAME"
+        add_system_user "$user_name:$user_id" "$group_name" '/home' "$PROJECT_NAME"
     else
         user_name=$(getent passwd $user_id | cut -d: -f1)
     fi
@@ -232,7 +155,7 @@ function create_virtual_user() {
 
             # sys_user -> create user and set password
             sys_user)
-                add_system_user "$user_name" "$GROUP_NAME" "$DEFAULT_HOME_DIR" "$QFTP_USER_TAG"
+                add_system_user "$user_name" "$GROUP_NAME" '/home' "$QFTP_USER_TAG"
                 chpasswd_message=$(echo "$user_name:$user_pass" | chpasswd 2>&1)
                 echo "      - $chpasswd_message"
                 ;;
@@ -356,10 +279,55 @@ function remove_all_qftp_users() {
 
 #---------------------------- CONTROLLING SAMBA ----------------------------#
 
-function start_samba() {
-    local config_file=$1
-    #exec ionice -c 3 smbd "--configfile=$config_file" --foreground --no-process-group </dev/null
-    exec ionice -c 3 smbd --foreground --no-process-group </dev/null
+TEMP_USERID=9876
+
+add_samba_user() {
+    username=$1 password=$2
+
+    adduser "$username" -D -H -g 'Samba User' -s /sbin/nologin -u "$TEMP_USERID"
+    echo "$username:$password" | chpasswd
+    sed -i "s/:$TEMP_USERID/:1001/g" /etc/passwd
+    sed -i "/\:$TEMP_USERID:/d" /etc/group
+
+    echo -e "$password\n$password" | smbpasswd -a -c "$SAMBA_CONF_FILE" -s "$username"
+    echo "Usuario de Samba creado: $username"
+}
+
+# Create the samba configuration file from the template.
+#
+# create_vsftpd_conf <output_file> [template_file]
+#
+# Parameters:
+#   - output_file: the path to the samba configuration file to be created.
+#   - template_file: (opcional) el archivo utilizado como template
+#
+# Example: build_samba_conf "/app/tmp/samba.conf"
+#
+build_samba_conf() {
+    local output_file=$1 template_file=${2:-'samba_config.template'}
+    [[ -z   "$output_file"   ]] && fatal_error "build_samba_conf() requires a parameter with the output file"
+    [[ ! -f "$template_file" ]] && fatal_error "build_samba_conf() requires the file $PWD/$template_file"
+
+    print_template "$(cat "$template_file")"                          \
+        "{MAIN_USER_NAME}"    "$USER_NAME"                            \
+        "{MAIN_GROUP_NAME}"   "$GROUP_NAME"                           \
+        > "$output_file"
+}
+
+
+
+start_samba() {
+    #exec ionice -c 3 smbd "--configfile=$config_file" "--option=log file=/appdata/log/samba-orig.log" --foreground --no-process-group </dev/null
+#     exec ionice -c 3 smbd "--configfile=$config_file" "--log-basename=/appdata/log" \
+#          "--option=lock directory=/appdata/lock" \
+#          "--option=winbindd socket directory=/appdata/sock" \
+#          --debuglevel=0 --debug-stdout --foreground  --no-process-group  </dev/null
+
+#        "--log-basename=/appdata/log" \
+
+    exec ionice -c 3 smbd \
+        "--configfile=$SAMBA_CONF_FILE" \
+        --debuglevel=0 --debug-stdout --foreground --no-process-group  </dev/null
 }
 
 #-------------------------- READING CONFIGURATION --------------------------#
@@ -394,35 +362,32 @@ source "$SCRIPT_DIR/lib_logfile.sh" # functions for handling logging messages
 source "$SCRIPT_DIR/lib_utils.sh"   # miscellaneous utility functions
 
 
-echo
-echo "$0"
+echo -e '\n-----------------------------------------------------------'
+echo -e "$BLUE$0"
 
-
-message "Validating USER_ID"
-QSERVER_USER_ID=${USER_ID:-$(id -u)}
+message "Validating USER_ID"  # QSERVER_USER_ID
 if ! validate_integer "$QSERVER_USER_ID" ; then
     fatal_error "USER_ID must be a valid integer value"
 fi
-unset USER_ID
 
-message "Validating GROUP_ID"
-QSERVER_GROUP_ID="${GROUP_ID:-$(id -g)}"
-if ! validate_integer "$GROUP_ID" ; then
+message "Validating GROUP_ID" # QSERVER_GORUP_ID
+if ! validate_integer "$QSERVER_GROUP_ID" ; then
     fatal_error "GROUP_ID must be a valid integer value"
 fi
-unset GROUP_ID
 
-message "Ensuring existence of main user/group [$QSERVER_USER_ID/$QSERVER_GROUP_ID]"
-ensure_qserver_user_and_group           \
-    "$QSERVER_USER" "$QSERVER_USER_ID"  \
-    "$QSERVER_USER" "$QSERVER_GROUP_ID" \
-    "$DEFAULT_HOME_DIR"
+if is_root; then
+    message "Ensuring existence of main user/group [$QSERVER_USER_ID/$QSERVER_GROUP_ID]"
+    ensure_qserver_user_and_group           \
+        "$QSERVER_USER" "$QSERVER_USER_ID"  \
+        "$QSERVER_USER" "$QSERVER_GROUP_ID"
+fi
 
 message "Activating the log file for this script: $QSERVER_LOG_FILE"
 set_logfile "$QSERVER_LOG_FILE"
 
-message "Switching to the script's directory: $SCRIPT_DIR"
-cd "$SCRIPT_DIR"
+message "Switching to the app's directory: $APP"
+cd "$APP" \
+ || fatal_error "Failed to change directory to $APP"
 
 #message "Removing any previous samba configurations"
 #rm -f "$SAMBA_CONF_DIR/*"
@@ -439,6 +404,16 @@ echo "CFG_USER_LIST:"
 echo "$CFG_USER_LIST"
 echo "-----------------------------"
 
+
+message "Generando configuracion"
+#mkdir -p "$QSERVER_TEMP_DIR" \
+# || fatal_error "Failed al crear el directorio $QSERVER_TEMP_DIR"
+build_samba_conf "$SAMBA_CONF_FILE"
+
+add_samba_user alice alice
+add_samba_user bob   bob
+
+
 #
 #message "Creating vsftpd configuration file: $VSFTPD_CONF_FILE"
 #create_vsftpd_conf "$VSFTPD_CONF_FILE"
@@ -447,9 +422,9 @@ echo "-----------------------------"
 #create_qftp_users "$CFG_USER_LIST" "$CFG_RESOURCE_LIST"
 
 
-#halt
 message "Starting SAMBA service"
 start_samba "$SAMBA_CONF_FILE"
+
 
 
 ## hack

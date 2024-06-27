@@ -106,5 +106,12 @@
 #== USER RESOURCES ========================================
 
 #  ## load custom resources for the Windows User
-#        include = {SAMBASYS_CONFIG_DIR}/%U.conf
+#        include = {SAMBA_CONF_FILE}/%U.conf
+
+[AliceHome]
+  path     = /appdata/alice_files
+  comment  = This resource contains files exclusive to Alice
+  writable = no
+  guest ok = no
+
 
