@@ -147,26 +147,27 @@ build_image() {
 
 # Upload local changes to the remote repository
 push_image() {
-    local user token last_commit_tag
+    local user token last_commit last_commit_tag
     local user_token_file="$PROJECT_DIR/docker-cmd.token"
 
     # check for uncommitted files in git
     if [[ -n $(git status --porcelain) ]]; then
-        fatal_error "There are uncommitted changes in the repository." \
-        "Please commit or stash them before pushing the image."
+        fatal_error "There are uncommitted changes in the repository" \
+        "Please commit or stash them before pushing the image"
     fi
 
     # get the last commit tag
-    last_commit_tag=$(git describe --tags --abbrev=0)
+    last_commit=$(git rev-parse HEAD)
+    last_commit_tag=$(git describe --exact-match --tags "$last_commit" 2>/dev/null)
     if [[ -z "$last_commit_tag" ]]; then
-        fatal_error "No tag found on the latest commit." \
-        "Please tag your latest commit before pushing the image."
+        fatal_error "No tag found on the latest commit" \
+        "Please tag your latest commit before pushing the image"
     fi
 
     # check if the user/token file exists
     if [[ ! -e "$user_token_file" ]]; then
-        falta_error "To push the image, the file docker-cmd.token must exist." \
-        "The file should contain the Docker Hub username on the first line and the token on the second line."
+        falta_error "To push the image, the file docker-cmd.token must exist" \
+        "The file should contain the Docker Hub username on the first line and the token on the second line"
     fi
 
     # build the image if it does not exist
