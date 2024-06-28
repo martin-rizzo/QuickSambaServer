@@ -14,5 +14,5 @@ Thumbs.db
 *.log
 
 # Ignore personal text files
-README-PERSONAL.MD
-
+/README-PERSONAL.MD
+/*.token
