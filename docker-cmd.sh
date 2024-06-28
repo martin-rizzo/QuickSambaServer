@@ -166,7 +166,7 @@ push_image() {
 
     # check if the user/token file exists
     if [[ ! -e "$user_token_file" ]]; then
-        falta_error "To push the image, the file docker-cmd.token must exist" \
+        fatal_error "To push the image, the file docker-cmd.token must exist" \
         "The file should contain the Docker Hub username on the first line and the token on the second line"
     fi
 
@@ -176,7 +176,7 @@ push_image() {
     fi
 
     # read Docker Hub credentials from the user_token_file
-    while IFS= read -r line || [[ -n "$line" ]]; do
+    while IFS= read -r line; do
         if [[ -n "$line" && ! "$line" =~ ^[[:space:]]*# ]]; then
             if [[ -z "$user" ]]; then
                 user="$line"
@@ -187,25 +187,20 @@ push_image() {
         fi
     done < "$user_token_file"
 
-    echo "## user: $user"
-    echo "## token: $token"
-    echo "## last_commit_tag: $last_commit_tag"
-    exit 0
+    # login to Docker Hub
+    echo "$token" | docker login --username "$user" --password-stdin
+    if [[ $? -ne 0 ]]; then
+        fatal_error "Docker login failed. Please check your credentials and try again"
+    fi
 
-#     # login to Docker Hub
-#     echo "$token" | docker login --username "$user" --password-stdin
-#     if [[ $? -ne 0 ]]; then
-#         fatal_error "Docker login failed. Please check your credentials and try again."
-#     fi
-#
-#     docker tag "$IMAGE_NAME" "$user/$IMAGE_NAME"
-#     docker tag "$IMAGE_NAME" "$user/$IMAGE_NAME:$last_commit_tag"
-#     if ! docker push --all-tags "$user/$IMAGE_NAME" ; then
-#         falta_error "Failed to push the Docker image"
-#     fi
-#     docker logout
-#
-#     echo "Docker image pushed successfully: $user/$IMAGE_NAME:$last_commit_tag"
+    docker tag "$IMAGE_NAME" "$user/$IMAGE_NAME"
+    docker tag "$IMAGE_NAME" "$user/$IMAGE_NAME:$last_commit_tag"
+    if ! docker push --all-tags "$user/$IMAGE_NAME" ; then
+        fatal_error "Failed to push the Docker image"
+    fi
+    docker logout
+
+    echo "Docker image pushed successfully: $user/$IMAGE_NAME:$last_commit_tag"
 }
 
 # Stop and remove container and image
