@@ -5,6 +5,7 @@
 <img alt="Language" src="https://img.shields.io/badge/language-ash script-22E">
 <img alt="License"  src="https://img.shields.io/github/license/martin-rizzo/QuickSambaServer?color=11D">
 <img alt="Last"     src="https://img.shields.io/github/last-commit/martin-rizzo/QuickSambaServer">
+<img alt="Version"  src="https://img.shields.io/github/v/tag/martin-rizzo/QuickSambaServer?label=version">
 </p>
 
 <!--
@@ -29,15 +30,15 @@ You can easily get the QuickSambaServer image from Docker Hub. Follow the instru
 
   1. Pull the image from Docker Hub:
 
-    ```bash
+```bash
     docker pull martinrizzo/quick-samba-server
-    ```
+```
 
   2. Run the container:
 
-    ```bash
+```bash
     docker run -d -e USER_ID=$(id -u) -e GROUP_ID=$(id -g) -p 139:139 -p 445:445 --name samba -v /path/to/your/data:/appdata martinrizzo/quick-samba-server
-    ```
+```
 
 ### Graphical Interface (Docker Desktop)
 
