@@ -31,7 +31,7 @@
 #_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 
 # Use Alpine Linux as the base image for lightweight containerization
-FROM alpine:3.19
+FROM alpine:3.19.2
 MAINTAINER Martin Rizzo <martinrizzo@gmail.com>
 
 RUN mkdir -p /app /app/etc
