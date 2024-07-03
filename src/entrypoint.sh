@@ -115,17 +115,17 @@ ensure_qserver_user_and_group() {
     message '}'
 }
 
-# Add a Samba virtual user
+# Adds a Samba virtual user with the specified username and password
 #
 # Usage:
 #   add_samba_vuser <username> <password>
 #
-# Description:
-#   This function adds a new Samba virtual user.
-#   If the user already exists, an error message is displayed and the script exits.
+# Parameters:
+#   - username: the username for the Samba virtual user
+#   - password: the password for the Samba virtual user
 #
 # Example:
-#   add_samba_vuser user1 password123
+#   add_samba_vuser "user1" "password123"
 #
 add_samba_vuser() {
     local username=$1 password=$2
@@ -142,13 +142,7 @@ add_samba_vuser() {
     echo "Samba virtual user created: $username"
 }
 
-# Remove all Samba virtual users
-#
-# Usage:
-#   remove_all_samba_vusers
-#
-# Description:
-#   This function removes all users previously created with 'add_samba_vuser()'
+# Removes all users previously created with 'add_samba_vuser()'
 #
 remove_all_samba_vusers() {
 
@@ -164,188 +158,138 @@ remove_all_samba_vusers() {
     sed -i "/$QSERVER_VUSER_TAG/d" /etc/passwd
 }
 
+#==================== RESOURCE CONFIGURATION FILE PATHS ====================#
 
-# # Create virtual FTP users and associate them with specified resources.
-# #
-# # Usage:
-# #   create_virtual_user <user_name> <user_pass> <user_resources> <resource_list> [options]
-# #
-# # Parameters:
-# #   - user_name      : Username for the virtual FTP user.
-# #   - user_pass      : Password for the virtual FTP user.
-# #   - user_resources : Comma-separated list of resources to associate with the user.
-# #   - resource_list  : List of available resources. Each line should be formatted as
-# #                      "resname|resdir|text"
-# #   - options        : Comma-separated list of options for additional configurations.
-# #
-# # Globals:
-# #   DIRS_TO_VERIFY : Directories of the created virtual user are appended to
-# #                    this list to verify them during post-processing.
-# # Example:
-# #   create_virtual_user "john" "pass123" "res1,res2" "$RESOURCE_LIST" sys_user,writable_is_fatal
-# #
-# # Notes:
-# #   - If 'sys_user' option is provided, the script will create a system user with
-# #     the given username and password.
-# #   - If 'writable_is_fatal' option is provided, any attempt to create a virtual
-# #     userwith a writable home directory will result in a fatal error.
-# #   - Every resource listed in 'user_resources' must exist in the 'resource_list'.
-# #   - Each virtual user can only be associated with one resource. If a user is
-# #     assigned multiple resources, an error will be generated.
-# #
-# function create_virtual_user() {
-#     local user_name=$1 user_pass=$2 user_resources=$3 resource_list=$4 options=$5
-#     local chpasswd_message resource_values resdir home_dir writable_is_fatal
+# Generates the full path for a temporary resource configuration file
 #
-#     # loop a travez de las opciones suministradas
-#     IFS=',' ; for opt in $options; do
-#         case $opt in
+# Usage:
+#   make_resconf_path <resource_name> [mode]
 #
-#             # sys_user -> create user and set password
-#             sys_user)
-#                 add_system_user "$user_name" "$GROUP_NAME" '/home' "$QFTP_USER_TAG"
-#                 chpasswd_message=$(echo "$user_name:$user_pass" | chpasswd 2>&1)
-#                 echo "      - $chpasswd_message"
-#                 ;;
+# Parameters:
+#   - resource_name: the name of the resource, e.g., "Files", "Music"
+#   - mode         : (optional) can be 'ro', 'rw', or 'def' (read-only, writable, and default)
+#                    Defaults to 'def' if not provided.
+# Example:
+#   files_conf_path=$(make_resconf_path "Files" "rw")
 #
-#             # writable_is_fatal -> fatal error if the home directory is writable
-#             writable_is_fatal)
-#                 writable_is_fatal=true
-#                 ;;
-#
-#         esac
-#     done
-#
-#     # loop through user resources.
-#     IFS=',' ; for resource in $user_resources; do
-#
-#         # get resource info
-#         resource_values=$(find_config_values "$resource" "$resource_list")
-#         [[ -z "$resource_values" ]] && \
-#             fatal_error "Resource '$resource' was not defined" \
-#                         "Please review the $CONFIG_NAME file"
-#         resdir=$(echo "$resource_values" | cut -d '|' -f 2)
-#         [[ -z "$resdir" ]] && \
-#             fatal_error "Resource '$resource' does not have an associated directory" \
-#                         "Please review the $CONFIG_NAME file"
-#
-#         # define the home directory for the user based on the resource directory
-#         home_dir="$APPDATA_DIR/$resdir"
-#         [[ ! -d "$home_dir" ]] && \
-#             fatal_error "Directory '$resdir' associated with resource '$resource' does not exist." \
-#                         "Please review the $CONFIG_NAME file."
-#
-#         [[ -e "/$VIRTUAL_USERS_DIR/$user_name" ]] && \
-#             fatal_error "El usuario '$user_name' tiene mas de un recurso asignado" \
-#                         "Please review the $CONFIG_NAME file."
-#
-#         # link the user's home directory
-#         ln -s "$home_dir" "/$VIRTUAL_USERS_DIR/$user_name"
-#
-#         # add the directory to the list
-#         # (if 'writable_is_fatal' then prefix it with '!')
-#         [[ "$writable_is_fatal" == true ]] && home_dir="!${home_dir}"
-#         DIRS_TO_VERIFY="${DIRS_TO_VERIFY}:${home_dir}"
-#
-#     done
-# }
+make_resconf_path() {
+    local resource_name=$1 mode=${2:-'def'}
+    echo "$SAMBA_CONF_DIR/$resource_name-$mode.resconf"
+}
 
+# Removes all temporary resource configuration files created by 'make_resconf_path()'
+#
+remove_all_resconf_files() {
+    rm -f "$SAMBA_CONF_DIR"/*.resconf
+}
 
-# # Create QuickFtpServer users based on the provided user list.
-# # (users are created as system users to be read by vsftpd via PAM)
-# #
-# # Usage:
-# #   create_qftp_users <user_list> <resource_list>
-# #
-# # Parameters:
-# #   - user_list     : List of users to be created. Each line should be formatted as
-# #                     "username|password|resource"
-# #   - resource_list : List of available resources. Each line should be formatted as
-# #                     "resname|resdir|text".
-# # Example:
-# #   create_qftp_users "$CFG_USER_LIST" "$CFG_RESOURCE_LIST"
-# #
-# # Notes:
-# #   - If a user already exists in the system, an error will be generated.
-# #   - All created users can be removed with the function remove_all_qftp_users.
-# #
-# function create_qftp_users() {
-#     local user_list=$1 resource_list=$2
-#
-#     DIRS_TO_VERIFY=
-#
-#     # iterate over each line of the user list
-#     echo "$user_list" > $TEMP_FILE
-#     while IFS='|' read -r user_name user_pass user_resources;
-#     do
-#
-#         # skip if the username is empty
-#         [[ -z "$user_name" ]] && continue
-#
-#         # create the virtual user and associate it with its resources
-#         # (the 'ftp' user is the anonymous user and doesn't need a system user)
-#         if [[ "$user_name" == ftp ]]; then
-#             create_virtual_user "$user_name" "$user_pass" "$user_resources" "$resource_list" writable_is_fatal
-#         else
-#             create_virtual_user "$user_name" "$user_pass" "$user_resources" "$resource_list" sys_user
-#         fi
-#
-#     done < $TEMP_FILE
-#     rm $TEMP_FILE
-#
-#     verify_read_only_directories "$DIRS_TO_VERIFY" "$MAIN_USER" "$CFG_FIX_WRITABLE_ROOT"
-#
-# }
 
 #====================== BUILDING SAMBA CONFIGURATION =======================#
 
-# Create the samba configuration file from the template.
+# Prints the complete samba configuration
 #
-# create_vsftpd_conf <output_file> [template_file]
+# Usage:
+#   print_samba_conf <resource_list> [template_file]
 #
 # Parameters:
-#   - output_file: the path to the samba configuration file to be created.
-#   - template_file: (opcional) el archivo utilizado como template
+#   - resource_list: a list of resources in the format "name|dir|comment"
+#   - template_file: (optional) the file used as a template.
+#                    Defaults to 'samba_conf.template' if not provided.
 #
-# Example: build_samba_conf "/app/tmp/samba.conf"
+# Example:
+#   print_samba_conf "$CFG_RESOURCE_LIST" > "/app/etc/samba.conf"
 #
-build_samba_conf() {
-    local output_file=$1 template_file=${2:-'samba_config.template'}
-    [[ -z   "$output_file"   ]] && fatal_error "build_samba_conf() requires a parameter with the output file"
-    [[ ! -f "$template_file" ]] && fatal_error "build_samba_conf() requires the file $PWD/$template_file"
+print_samba_conf() {
+    local resource_list=$1 template_file=${2:-'samba_config.template'}
+    [[ ! -f "$template_file" ]] && fatal_error "print_samba_conf() requires the file $template_file"
 
-    print_template "$(cat "$template_file")"    \
-        "{SAMBA_CONF_FILE}"   "$SAMBA_CONF_DIR" \
-        "{MAIN_USER_NAME}"    "$USER_NAME"      \
-        "{MAIN_GROUP_NAME}"   "$GROUP_NAME"     \
-        > "$output_file"
+    guest_resources=$(print_guest_resources "$resource_list")
+    print_template "content:$(cat "$template_file")"  \
+        '{SAMBA_CONF_FILE}'   "$SAMBA_CONF_DIR"       \
+        '{MAIN_USER_NAME}'    "$QSERVER_USER"         \
+        '{MAIN_GROUP_NAME}'   "$QSERVER_GROUP"        \
+        '{GUEST_RESOURCES}'   "$guest_resources"      \
+        '{GUEST_USER}'        "anonymous"
 }
 
-build_resource_conf() {
+# Prints guest resource configurations based on the provided resource list
+#
+# Usage:
+#   print_guest_resources <resource_list>
+#
+# Parameters:
+#   - resource_list: a list of resources in the format "name|dir|comment"
+#
+# Example
+#   print_guest_resources "$CFG_RESOURCE_LIST"
+#
+print_guest_resources() {
+    local resource_list=$1
+
+    echo "$resource_list" | \
+    while IFS='|' read -r name directory comment; do
+        if [[ $name ]]; then
+            print_template samba_resource_guest.template \
+                "{RESOURCE_NAME}"    "$name"             \
+                "{RESOURCE_PATH}"    "$directory"        \
+                "{RESOURCE_COMMENT}" "$comment"
+        fi
+    done
+}
+
+# Prints resource configuration based on name, directory, and comment
+#
+# Usage:
+#   print_resource_conf <name> <directory> <comment>
+#
+# Parameters:
+#   - name     : the name of the resource
+#   - directory: the directory of the resource
+#   - comment  : a comment describing the resource
+#
+# Example:
+#   print_resource_conf "Documents" "docs" "User documents"
+#
+print_resource_conf() {
     local name=$1 directory=$2 comment=$3
-    local path output_file
     path="$APPDATA/$directory"
 
-    echo "Building resource $name"
-    output_file="$SAMBA_CONF_DIR/resource-$name.conf"
-    print_template "$(cat 'samba_resource.template')" \
+    message "Building resource $name"
+    print_template "content:$(cat 'samba_resource.template')" \
         "{RESOURCE_NAME}"    "$name"     \
         "{RESOURCE_PATH}"    "$path"     \
-        "{RESOURCE_COMMENT}" "$comment"  \
-        > "$output_file"
+        "{RESOURCE_COMMENT}" "$comment"
 }
 
-build_user_conf() {
+# Prints user configuration based on username, password, and resources
+#
+# Usage:
+#   print_user_conf <username> <password> <resources>
+#
+# Parameters:
+#   - username : the username of the user
+#   - password : the password of the user
+#   - resources: a comma-separated list of resource names
+#
+# Example:
+#   print_user_conf "user1" "password123" "Files,Music"
+#
+print_user_conf() {
     local username=$1 password=$2 resources=$3
 
-    add_samba_vuser "$username" "$password"
-
-    output_file="$SAMBA_CONF_DIR/$username.conf"
-    rm -f "$output_file"
     for name in ${resources//,/ } ; do
-        cat "$SAMBA_CONF_DIR/resource-$name.conf" >> "$output_file"
+        resource_conf_file=$(make_resconf_path "$name")
+        cat "$resource_conf_file"
     done
-    echo >> "$output_file"
+    echo
+}
+
+#======================== CONTROLLING SAMBA SERVER =========================#
+
+start_samba() {
+    exec ionice -c 3 smbd \
+        --configfile="$SAMBA_CONF_FILE" \
+        --debuglevel=0 --debug-stdout --foreground --no-process-group </dev/null
 }
 
 #========================== READING CONFIGURATION ==========================#
@@ -378,12 +322,6 @@ source "$SCRIPT_DIR/lib_config.sh"  # functions for reading config files
 source "$SCRIPT_DIR/lib_logfile.sh" # functions for handling logging messages
 source "$SCRIPT_DIR/lib_utils.sh"   # miscellaneous utility functions
 
-start_samba() {
-    exec ionice -c 3 smbd \
-        --configfile="$SAMBA_CONF_FILE" \
-        --debuglevel=0 --debug-stdout --foreground --no-process-group </dev/null
-}
-
 echo -e '\n-----------------------------------------------------------'
 echo -e "$BLUE$0"
 
@@ -414,10 +352,27 @@ cd "$APP" \
 #message "Removing any previous samba configurations"
 #rm -f "$SAMBA_CONF_DIR/*"
 #rm -f "/$VIRTUAL_USERS_DIR/*"
-#remove_all_qserver_users
+#remove_all_samba_vusers
 
-message "Reading configuration file: $QSERVER_CONFIG_FILE"
-for_each_config_var_in "$QSERVER_CONFIG_FILE" process_config_var
+if [[ -f "$QSERVER_CONFIG_FILE" ]]; then
+    message "Reading configuration file: $QSERVER_CONFIG_FILE"
+    for_each_config_var_in "$QSERVER_CONFIG_FILE" process_config_var
+else
+    message "No configuration file found ($QSERVER_CONFIG_FILE)"
+    message "Usando la configuracion default"
+fi
+
+# si no hubo declaracion de recursos entonces asignar la declaracion default
+CFG_RESOURCE_LIST=$(trim "$CFG_RESOURCE_LIST")
+if [[ -z $CFG_RESOURCE_LIST ]]; then
+    CFG_RESOURCE_LIST='Files|files|This resource contains files available to all users'
+fi
+
+# si no hubo declaracion de usuarios entonces asignar la declaracion default
+CFG_USER_LIST=$(trim "$CFG_USER_LIST")
+if [[ -z $CFG_USER_LIST ]]; then
+    CFG_USER_LIST='guest||Files'
+fi
 
 echo "-----------------------------"
 echo "CFG_RESOURCE_LIST:"
@@ -428,21 +383,29 @@ echo "-----------------------------"
 
 # creando configuracion principal de samba
 message "Generando configuracion"
-build_samba_conf "$SAMBA_CONF_FILE"
+print_samba_conf "$CFG_RESOURCE_LIST" > "$SAMBA_CONF_FILE"
 
-
-# creando configuracion para cada recurso
+# creando configuracion para cada recurso declarado
 echo "$CFG_RESOURCE_LIST" | \
 while IFS='|' read -r name directory comment; do
-    [[ $name ]] && build_resource_conf "$name" "$directory" "$comment"
+    if [[ $name ]]; then
+        resource_conf_file=$(make_resconf_path "$name")
+        print_resource_conf "$name" "$directory" "$comment" > "$resource_conf_file"
+    fi
 done
 
 # creando configuracion para cada usuario
 echo "$CFG_USER_LIST" | \
 while IFS='|' read -r username password resources; do
-    [[ $username ]] && build_user_conf "$username" "$password" "$resources"
+    if [[ $username ]]; then
+        output_file="$SAMBA_CONF_DIR/$username.conf"
+        [[ $username == 'guest' ]] && username='anonymous'
+        add_samba_vuser "$username" "$password"
+        print_user_conf "$username" "$password" "$resources" > "$output_file"
+    fi
 done
 
+remove_all_resconf_files
 
 
 #

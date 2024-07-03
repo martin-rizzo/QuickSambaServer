@@ -95,7 +95,11 @@ list_samba_resources() {
     echo -ne "Attempting to connect to Samba on $host...\r"
 
     # use smbclient to list resources
-    output=$(smbclient -L "$host" -U "$username%$password" 2>&1)
+    if [[ $username == guest ]]; then
+        output=$(smbclient -L "//$host" -N 2>&1)
+    else
+        output=$(smbclient -L "//$host" -U "$username%$password" 2>&1)
+    fi
 
     if [ $? -eq 0 ]; then
         echo -e "\033[K[$host] Available resources for $username:"
@@ -109,6 +113,9 @@ list_samba_resources() {
 #===========================================================================#
 # ///////////////////////////////// MAIN ////////////////////////////////// #
 #===========================================================================#
+
+# listar los recursos disponibles como guest:smbclient -L //servidor -N
+# loguearse en un recurso como guest:        smbclient //servidor/recurso -N
 
 # check if there are any arguments
 if [[ -z $1 ]]; then
@@ -151,6 +158,7 @@ echo
 if [[ -n "$USER_NAME" ]]; then
     list_samba_resources "$USER_NAME" "$PASSWORD" "${HOST_LIST[0]}"
 else
+    list_samba_resources 'guest' ''      "${HOST_LIST[0]}"
     list_samba_resources 'alice' 'alice' "${HOST_LIST[0]}"
     list_samba_resources 'bob'   'bob'   "${HOST_LIST[0]}"
 fi

@@ -63,23 +63,42 @@ function is_writable() {
     su "$user" -s /bin/sh -c "test -w \"$filepath\""
 }
 
-# Replace placeholders in a template with corresponding values and print the resulting string.
+# Replace placeholders in a template with corresponding values.
 #
 # Usage:
 #   print_template <template> [var1] [value1] [var2] [value2] ...
 #   print_template <template> "${template_vars[@]}"
 #
 # Parameters:
-#   - template          : the template string containing placeholders to be replaced.
-#   - var1, value1, ... : pairs of variables and values to replace in the template.
-#   - template_vars     : an array containing pairs of variables and values to replace in the template.
+#   - template          : Either a file path containing the template (File mode)
+#                         or a string prefixed with 'content:' (Content mode)
+#   - var1, value1, ... : Pairs of variables and values to replace in the template
+#   - template_vars     : An array containing pairs of variables and values
 #
 # Example:
+#
+#   # File mode
 #   template_vars=( "{NAME}" "John" "{DAY}" "Monday" )
-#   print_template "Hello, {NAME}! Today is {DAY}" "${template_vars[@]}"
+#   print_template "path/to/my_template.txt" "${template_vars[@]}"
+#
+#   # Content mode
+#   template_vars=( "{NAME}" "John" "{DAY}" "Monday" )
+#   print_template "content:Hello, {NAME}! Today is {DAY}" "${template_vars[@]}"
 #
 function print_template() {
     local template=$1 ; shift
+
+    # if the template starts with 'content:', treat it as a string.
+    # Otherwise, treat it as a filename and read its content.
+    if [[ "$template" == content:* ]]; then
+        template=${template#content:}
+    elif [[ -f "$template" ]]; then
+        template=$(cat "$template")
+    else
+        fatal_error "Template file '${template:0:64}' not found"
+    fi
+
+    # replace placeholders with their corresponding values
     while [[ $# -gt 0 ]]; do
         local key=$1 value=$2
         template=${template//$key/$value}

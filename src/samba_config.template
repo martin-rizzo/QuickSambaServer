@@ -2,15 +2,25 @@
 
 #== MAIN CONFIG ===========================================
 
+    ## Este nombre es usado para organizar y agrupar computadoras
+    ## en una red local, facilitando la localización y el acceso a
+    ## recursos compartidos.
+        workgroup = WORKGROUP
+
+    # Set the server description that will appear in the network browser
+        server string = Samba Server
+
+    # Map unknown users or users with incorrect passwords to the guest account
+        map to guest = Bad User
+
+    # Specify which system account will be used for guest access
+        guest account = {GUEST_USER}
+
     ## Este nombre es el que otros equipos en la red utilizarán para
     ## identificar y acceder al servidor Samba. Si no se establece,
     ## por defecto tomará el nombre del host de la máquina.
         netbios name = SAMBASERVER
 
-    ## Este nombre es usado para organizar y agrupar computadoras
-    ## en una red local, facilitando la localización y el acceso a
-    ## recursos compartidos.
-        workgroup = WORKGROUP
 
 #    ## Controla si el servidor Samba debe registrarse con los servicios
 #    ## de DNS multicast (mDNS), como Avahi.
@@ -102,6 +112,9 @@
 #???        path = /var/lib/samba/sysvol/localnet.lan/scripts
 #???        read only = No
 
+#== GUEST RESOURCES =======================================
+
+{GUEST_RESOURCES}
 
 #== USER RESOURCES ========================================
 

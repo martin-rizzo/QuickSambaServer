@@ -3,8 +3,5 @@
   comment    = {RESOURCE_COMMENT}
   path       = {RESOURCE_PATH}
   browseable = yes
-  writable   = yes
   guest ok   = yes
-#  create mode    = 0777
-#  directory mode = 0777
 

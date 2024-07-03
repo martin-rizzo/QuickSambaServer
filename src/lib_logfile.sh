@@ -94,7 +94,8 @@ function message() {
             PADDING=${PADDING#    }
             ;;
         *)
-            local message=$1 timestamp=$(date +"%Y-%m-%d %H:%M:%S")
+            local message=$1 timestamp
+            timestamp=$(date +"%Y-%m-%d %H:%M:%S")
             echo -e "${PADDING}${GREEN}>${DEFAULT_COLOR} $message"
             if [[ -n "$LIB_LOG_FILE" ]]; then
                 echo "$timestamp - $message" >> "$LIB_LOG_FILE"
@@ -105,8 +106,9 @@ function message() {
 
 # Display and log a warning message
 function warning() {
-    local message=$1 timestamp=$(date +"%Y-%m-%d %H:%M:%S")
-    echo -e "${CYAN}[${YELLOW}WARNING${CYAN}]${YELLOW} $message${DEFAULT_COLOR}"
+    local message=$1 timestamp
+    timestamp=$(date +"%Y-%m-%d %H:%M:%S")
+    echo -e "${CYAN}[${YELLOW}WARNING${CYAN}]${YELLOW} $message${DEFAULT_COLOR}" >&2
     if [[ -n "$LIB_LOG_FILE" ]]; then
         echo "$timestamp - WARNING: $message" >> "$LIB_LOG_FILE"
     fi
@@ -114,8 +116,9 @@ function warning() {
 
 # Display and log an error message
 function error() {
-    local message=$1 timestamp=$(date +"%Y-%m-%d %H:%M:%S")
-    echo -e "${CYAN}[${RED}ERROR${CYAN}]${RED} $message.${DEFAULT_COLOR}"
+    local message=$1 timestamp
+    timestamp=$(date +"%Y-%m-%d %H:%M:%S")
+    echo -e "${CYAN}[${RED}ERROR${CYAN}]${RED} $message.${DEFAULT_COLOR}" >&2
     if [[ -n "$LIB_LOG_FILE" ]]; then
         echo "$timestamp - ERROR: $message" >> "$LIB_LOG_FILE"
     fi
@@ -125,7 +128,7 @@ function error() {
 function fatal_error() {
     local error_message=$1 info_message=$2
     error "$error_message"
-    [[ -n "$info_message" ]] && echo -e "${CYAN}\xF0\x9F\x9B\x88  $info_message.${DEFAULT_COLOR}"
+    [[ -n "$info_message" ]] && echo -e "${CYAN}\xF0\x9F\x9B\x88  $info_message.${DEFAULT_COLOR}" >&2
     exit 1
 }
 

@@ -43,15 +43,16 @@ RUN mkdir -p /app /app/etc
 #   - entrypoint.sh   : container startup script
 #   - *.template      : templates used to generate configuration
 WORKDIR /app
-COPY                         \
-  lib_config.sh              \
-  lib_logfile.sh             \
-  lib_utils.sh               \
-  entrypoint.sh              \
-  samba_config.template      \
-  samba_resource.template    \
-  samba_resource_ro.template \
-  samba_user.template        \
+COPY                            \
+  lib_config.sh                 \
+  lib_logfile.sh                \
+  lib_utils.sh                  \
+  entrypoint.sh                 \
+  samba_config.template         \
+  samba_resource.template       \
+  samba_resource_ro.template    \
+  samba_resource_guest.template \
+  samba_user.template           \
   ./
 
 # Add additional commands to the profile (useful for CLI interaction)
