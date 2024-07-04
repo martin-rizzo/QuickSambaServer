@@ -19,7 +19,7 @@
     ## Este nombre es el que otros equipos en la red utilizarán para
     ## identificar y acceder al servidor Samba. Si no se establece,
     ## por defecto tomará el nombre del host de la máquina.
-        netbios name = SAMBASERVER
+        netbios name = {SERVER_NAME}
 
 
 #    ## Controla si el servidor Samba debe registrarse con los servicios
@@ -119,6 +119,6 @@
 #== USER RESOURCES ========================================
 
   ## load custom resources for the Windows User
-        include = {SAMBA_CONF_FILE}/%U.conf
+        include = {SAMBA_CONF_DIR}/%U.conf
 
 

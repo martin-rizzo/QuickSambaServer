@@ -6,6 +6,7 @@
 *~
 
 # Ignore system and user-specific files
+._*
 .DS_Store
 .profile
 Thumbs.db

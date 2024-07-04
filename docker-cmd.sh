@@ -45,12 +45,24 @@ PROJECT_DIR=$(realpath "$(dirname "${BASH_SOURCE[0]}")" )
 IMAGE_NAME='quick-samba-server'
 IMAGE_VER='0.1'
 CONTAINER_NAME='samba-server'
+
+# DEFAULT
 CONTAINER_PARAMETERS="
        {--USER}
        -v {DIR_TO_MOUNT}:/appdata:Z
        -p 139:139
        -p 445:445
 "
+
+# AHAVI
+CONTAINER_PARAMETERS="
+       {--USER}
+       -v {DIR_TO_MOUNT}:/appdata:Z
+       --network host
+"
+
+# AVAHI: -p 5353:5353 --network host
+
 LOG_LEVEL='debug'  # | debug | info | warn | error | fatal |
 NEWLINE='
 '

@@ -63,6 +63,7 @@ QSERVER_LOG_FILE="$QSERVER_LOG_DIR/quicksambaserver.log"
 # SAMBA FILES & DIRS
 SAMBA_CONF_DIR="$APP/etc"
 SAMBA_CONF_FILE="$SAMBA_CONF_DIR/smb.conf"
+AVAHI_CONF_FILE="$SAMBA_CONF_DIR/avahi.conf"
 SAMBA_LOG_FILE="$LOG_DIR/samba.log"
 PID_FILE="$RUN_DIR/samba.pid"
 
@@ -73,6 +74,7 @@ TEMP_FILE=$(mktemp /tmp/tempfile.XXXXXX)
 # CONFIG VARS
 CFG_USER_LIST=
 CFG_RESOURCE_LIST=
+CFG_SERVER_NAME=SMBTEST
 
 
 
@@ -205,7 +207,8 @@ print_samba_conf() {
 
     guest_resources=$(print_guest_resources "$resource_list")
     print_template "content:$(cat "$template_file")"  \
-        '{SAMBA_CONF_FILE}'   "$SAMBA_CONF_DIR"       \
+        '{SERVER_NAME}'       "$CFG_SERVER_NAME"      \
+        '{SAMBA_CONF_DIR}'    "$SAMBA_CONF_DIR"       \
         '{MAIN_USER_NAME}'    "$QSERVER_USER"         \
         '{MAIN_GROUP_NAME}'   "$QSERVER_GROUP"        \
         '{GUEST_RESOURCES}'   "$guest_resources"      \
@@ -229,9 +232,10 @@ print_guest_resources() {
     echo "$resource_list" | \
     while IFS='|' read -r name directory comment; do
         if [[ $name ]]; then
+            path="$APPDATA/$directory"
             print_template samba_resource_guest.template \
                 "{RESOURCE_NAME}"    "$name"             \
-                "{RESOURCE_PATH}"    "$directory"        \
+                "{RESOURCE_PATH}"    "$path"             \
                 "{RESOURCE_COMMENT}" "$comment"
         fi
     done
@@ -284,11 +288,41 @@ print_user_conf() {
     echo
 }
 
+#======================== CONTROLLING AVAHI SERVICE ========================#
+
+
+launch_avahi() {
+    print_template samba_avahi_service.template \
+        '{SERVER_NAME}'  "$CFG_SERVER_NAME" \
+        > "/etc/avahi/services/smb.service"
+
+    print_template avahi_config.template \
+        '{AVAHI_SERVER}'  "null" \
+        > "$AVAHI_CONF_FILE"
+
+    avahi-daemon --daemonize --file="$AVAHI_CONF_FILE"
+    if avahi-daemon --check; then
+        message "Avahi daemon launched"
+    else
+        fatal_error 'Imposible lanzar el avahi daemon'
+    fi
+}
+
+kill_avahi() {
+    avahi-daemon --kill
+}
+
+launch_netbios() {
+    local config_file=$1
+    nmbd --daemon --configfile="$config_file" --no-process-group
+}
+
 #======================== CONTROLLING SAMBA SERVER =========================#
 
 start_samba() {
+    local config_file=$1
     exec ionice -c 3 smbd \
-        --configfile="$SAMBA_CONF_FILE" \
+        --configfile="$config_file" \
         --debuglevel=0 --debug-stdout --foreground --no-process-group </dev/null
 }
 
@@ -415,6 +449,12 @@ remove_all_resconf_files
 #message "Creating Linux users"
 #create_qftp_users "$CFG_USER_LIST" "$CFG_RESOURCE_LIST"
 
+
+message "Launching Avahi service"
+launch_avahi
+
+message "Launching NetBIOS service"
+launch_netbios "$SAMBA_CONF_FILE"
 
 message "Starting SAMBA service"
 start_samba "$SAMBA_CONF_FILE"

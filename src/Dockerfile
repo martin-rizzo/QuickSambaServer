@@ -43,16 +43,18 @@ RUN mkdir -p /app /app/etc
 #   - entrypoint.sh   : container startup script
 #   - *.template      : templates used to generate configuration
 WORKDIR /app
-COPY                            \
-  lib_config.sh                 \
-  lib_logfile.sh                \
-  lib_utils.sh                  \
-  entrypoint.sh                 \
-  samba_config.template         \
-  samba_resource.template       \
-  samba_resource_ro.template    \
-  samba_resource_guest.template \
-  samba_user.template           \
+COPY                                      \
+  lib_config.sh                           \
+  lib_logfile.sh                          \
+  lib_utils.sh                            \
+  entrypoint.sh                           \
+  templates/avahi_config.template         \
+  templates/samba_avahi_service.template  \
+  templates/samba_config.template         \
+  templates/samba_resource.template       \
+  templates/samba_resource_ro.template    \
+  templates/samba_resource_guest.template \
+  templates/samba_user.template           \
   ./
 
 # Add additional commands to the profile (useful for CLI interaction)
@@ -61,9 +63,10 @@ COPY profile.sh /etc/profile.d/ls_aliases.sh
 # Install samba & tini
 # Set execute permissions for scripts
 RUN set -ex \
- &&  apk --no-cache --no-progress update          \
- &&  apk --no-cache --no-progress add samba tini  \
- &&  chmod 755 /app                               \
+ &&  apk --no-cache --no-progress update                           \
+ &&  apk --no-cache --no-progress add samba tini avahi avahi-tools \
+ &&  rm /etc/avahi/services/*                                      \
+ &&  chmod 755 /app                                                \
  &&  chmod +x  /app/entrypoint.sh
 
 ## Expose Samba ports
