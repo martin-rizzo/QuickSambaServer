@@ -71,11 +71,12 @@ PID_FILE="$RUN_DIR/samba.pid"
 # FILES
 TEMP_FILE=$(mktemp /tmp/tempfile.XXXXXX)
 
-# CONFIG VARS
-CFG_USER_LIST=
-CFG_RESOURCE_LIST=
+# DEFAULT CONFIGURATION
+CFG_RESOURCE_LIST='Files|files|This resource contains files available to all users'
+CFG_USER_LIST='guest||Files'
 CFG_SERVER_NAME=SMBTEST
-
+CFG_AVAHI=false
+CFG_NETBIOS=true
 
 
 #================================== USERS ==================================#
@@ -212,7 +213,7 @@ print_samba_conf() {
         '{MAIN_USER_NAME}'    "$QSERVER_USER"         \
         '{MAIN_GROUP_NAME}'   "$QSERVER_GROUP"        \
         '{GUEST_RESOURCES}'   "$guest_resources"      \
-        '{GUEST_USER}'        "anonymous"
+        '{GUEST_USER}'        "$QSERVER_USER"
 }
 
 # Prints guest resource configurations based on the provided resource list
@@ -328,6 +329,11 @@ start_samba() {
 
 #========================== READING CONFIGURATION ==========================#
 
+begin_config() {
+    TMP_RESOURCE_LIST=
+    TMP_USER_LIST=
+}
+
 process_config_var() {
     local varname=$1 value=$2
     local ERROR=1
@@ -335,16 +341,37 @@ process_config_var() {
     case $varname in
         RESOURCE)
             value=$(format_value "$value" name reldir txt) || return $ERROR
-            CFG_RESOURCE_LIST="${CFG_RESOURCE_LIST}${value}$NEWLINE"
+            TMP_RESOURCE_LIST="${TMP_RESOURCE_LIST}${value}$NEWLINE"
             ;;
         USER)
             value=$(format_value "$value" user pass reslist) || return $ERROR
-            CFG_USER_LIST="${CFG_USER_LIST}${value}$NEWLINE"
+            TMP_USER_LIST="${TMP_USER_LIST}${value}$NEWLINE"
+            ;;
+        SERVER_NAME)
+            CFG_SERVER_NAME=$(format_value "$value" txt) || return $ERROR
+            ;;
+        AVAHI)
+            CFG_AVAHI=$(format_value "$value" bool) || return $ERROR
+            ;;
+        NETBIOS)
+            CFG_NETBIOS=$(format_value "$value" bool) || return $ERROR
             ;;
         PRINT_ERROR)
             echo "ERROR: $value"
             ;;
     esac
+}
+
+end_config() {
+    TMP_RESOURCE_LIST=$(trim "$TMP_RESOURCE_LIST")
+    if [[ "$TMP_RESOURCE_LIST" ]]; then
+        CFG_RESOURCE_LIST=$TMP_RESOURCE_LIST
+    fi
+    TMP_USER_LIST=$(trim "$TMP_USER_LIST")
+    if [[ "$TMP_USER_LIST" ]]; then
+        CFG_USER_LIST=$TMP_USER_LIST
+    fi
+    unset TMP_RESOURCE_LIST TMP_USER_LIST
 }
 
 #===========================================================================#
@@ -389,24 +416,15 @@ cd "$APP" \
 #remove_all_samba_vusers
 
 if [[ -f "$QSERVER_CONFIG_FILE" ]]; then
-    message "Reading configuration file: $QSERVER_CONFIG_FILE"
+    message "Processing configuration file: $QSERVER_CONFIG_FILE"
+    begin_config
     for_each_config_var_in "$QSERVER_CONFIG_FILE" process_config_var
+    end_config
 else
     message "No configuration file found ($QSERVER_CONFIG_FILE)"
     message "Usando la configuracion default"
 fi
 
-# si no hubo declaracion de recursos entonces asignar la declaracion default
-CFG_RESOURCE_LIST=$(trim "$CFG_RESOURCE_LIST")
-if [[ -z $CFG_RESOURCE_LIST ]]; then
-    CFG_RESOURCE_LIST='Files|files|This resource contains files available to all users'
-fi
-
-# si no hubo declaracion de usuarios entonces asignar la declaracion default
-CFG_USER_LIST=$(trim "$CFG_USER_LIST")
-if [[ -z $CFG_USER_LIST ]]; then
-    CFG_USER_LIST='guest||Files'
-fi
 
 echo "-----------------------------"
 echo "CFG_RESOURCE_LIST:"
@@ -431,9 +449,8 @@ done
 # creando configuracion para cada usuario
 echo "$CFG_USER_LIST" | \
 while IFS='|' read -r username password resources; do
-    if [[ $username ]]; then
+    if [[ -n $username && $username != 'guest' ]]; then
         output_file="$SAMBA_CONF_DIR/$username.conf"
-        [[ $username == 'guest' ]] && username='anonymous'
         add_samba_vuser "$username" "$password"
         print_user_conf "$username" "$password" "$resources" > "$output_file"
     fi
@@ -449,12 +466,15 @@ remove_all_resconf_files
 #message "Creating Linux users"
 #create_qftp_users "$CFG_USER_LIST" "$CFG_RESOURCE_LIST"
 
+if [[ "$CFG_AVAHI" == true ]]; then
+    message "Launching Avahi service"
+    launch_avahi
+fi
 
-message "Launching Avahi service"
-launch_avahi
-
-message "Launching NetBIOS service"
-launch_netbios "$SAMBA_CONF_FILE"
+if [[ "$CFG_NETBIOS" == true ]]; then
+    message "Launching NetBIOS service"
+    launch_netbios "$SAMBA_CONF_FILE"
+fi
 
 message "Starting SAMBA service"
 start_samba "$SAMBA_CONF_FILE"

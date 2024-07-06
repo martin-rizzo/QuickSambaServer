@@ -73,17 +73,36 @@ local_ip_addresses() {
 
 #======================== SAMBA CHECKING FUNCTIONS =========================#
 
-# Function to check Samba ports
-check_samba_ports() {
-    local host=${1:-localhost}
-    ports=(139 445 137 138)
+# Function to check ports
+check_ports() {
+    local port_protocols=$1 host=${2:-localhost}
+    local nc_params
 
     echo "  [$host]"
-    for port in "${ports[@]}"; do
-        if nc -z -w1 "$host" "$port" &>/dev/null; then
-            echo -e "    - Port $port: ${GREEN}Active${NC}"
+
+    # split the port_protocols string by spaces
+    IFS=' ' read -r -a port_array <<< "$port_protocols"
+
+    for port_proto in "${port_array[@]}"; do
+
+        # split each port:protocol pair
+        IFS=':' read -r port protocol service <<< "$port_proto"
+
+        case "$protocol" in
+            TCP) nc_params='-z -w1'    ;;
+            UDP) nc_params='-z -u -w1' ;;
+            *)   echo "Error: protocolo $protocol desconocido"
+                 exit 1
+                 ;;
+        esac
+
+        # check the port
+        printf "    - Port %4s:%-8s " "$port" "$service"
+        if nc $nc_params "$host" "$port" &>/dev/null; then
+        # nc -z -u -w1 "$host" "$port"
+            echo -e "${GREEN}Active${NC}"
         else
-            echo -e "    - Port $port: ${RED}Inactive${NC}"
+            echo -e "${RED}Inactive${NC}"
         fi
     done
 }
@@ -150,7 +169,7 @@ fi
 echo
 echo "Checking Samba Service"
 for host in "${HOST_LIST[@]}"; do
-    check_samba_ports "$host"
+    check_ports "139:TCP:SMB 445:TCP:SMB 137:UDP:NETBIOS 138:UDP:NETBIOS 5353:UDP:AVAHI" "$host"
 done
 echo
 
