@@ -1,7 +1,0 @@
-
-[{RESOURCE_NAME}]
-  comment    = {RESOURCE_COMMENT}
-  path       = {RESOURCE_PATH}
-  browseable = yes
-  guest ok   = yes
-

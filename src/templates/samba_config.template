@@ -112,13 +112,12 @@
 #???        path = /var/lib/samba/sysvol/localnet.lan/scripts
 #???        read only = No
 
-#== GUEST RESOURCES =======================================
+#== GLOBAL RESOURCES ======================================
 
-{GUEST_RESOURCES}
+{GLOBAL_RESOURCES_CONF}
 
 #== USER RESOURCES ========================================
 
-  ## load custom resources for the Windows User
-        include = {SAMBA_CONF_DIR}/%U.conf
+{USER_RESOURCES_CONF}
 
 

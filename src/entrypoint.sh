@@ -74,6 +74,7 @@ TEMP_FILE=$(mktemp /tmp/tempfile.XXXXXX)
 # DEFAULT CONFIGURATION
 CFG_RESOURCE_LIST='Files|files|This resource contains files available to all users'
 CFG_USER_LIST='guest||Files'
+CFG_PUBLIC_RESOURCES='||'
 CFG_SERVER_NAME=SMBTEST
 CFG_AVAHI=false
 CFG_NETBIOS=true
@@ -206,64 +207,78 @@ print_samba_conf() {
     local resource_list=$1 template_file=${2:-'samba_config.template'}
     [[ ! -f "$template_file" ]] && fatal_error "print_samba_conf() requires the file $template_file"
 
-    guest_resources=$(print_guest_resources "$resource_list")
-    print_template "content:$(cat "$template_file")"  \
-        '{SERVER_NAME}'       "$CFG_SERVER_NAME"      \
-        '{SAMBA_CONF_DIR}'    "$SAMBA_CONF_DIR"       \
-        '{MAIN_USER_NAME}'    "$QSERVER_USER"         \
-        '{MAIN_GROUP_NAME}'   "$QSERVER_GROUP"        \
-        '{GUEST_RESOURCES}'   "$guest_resources"      \
-        '{GUEST_USER}'        "$QSERVER_USER"
+    global_resources_conf=$(print_global_resources_conf "$resource_list")
+    print_template "content:$(cat "$template_file")"        \
+        '{SERVER_NAME}'           "$CFG_SERVER_NAME"        \
+        '{SAMBA_CONF_DIR}'        "$SAMBA_CONF_DIR"         \
+        '{MAIN_USER_NAME}'        "$QSERVER_USER"           \
+        '{MAIN_GROUP_NAME}'       "$QSERVER_GROUP"          \
+        '{GUEST_USER}'            "$QSERVER_USER"           \
+        '{GLOBAL_RESOURCES_CONF}' "$global_resources_conf"  \
+        '{USER_RESOURCES_CONF}'   "include = $SAMBA_CONF_DIR/%U.conf"
 }
 
-# Prints guest resource configurations based on the provided resource list
+# Prints resource configuration
 #
 # Usage:
-#   print_guest_resources <resource_list>
+#   print_resource_conf ????
+#
+# Parameters:
+#   ????
+#
+# Example:
+#   ????
+#
+print_resource_conf() {
+    local template=$1 name=$2 directory=$3 comment=$4 public_resources=$5
+    local path public
+
+    path="$APPDATA/$directory"
+
+    # forzar que $public_resources empiece y termine con un pipe '|'
+    [[ "${public_resources:0:1}" != '|' ]] && public_resources="|$public_resources"
+    [[ "${public_resources: -1}" != '|' ]] && public_resources="$public_resources|"
+
+    # hacer el recurso 'public' si el nombre del recurso
+    # esta includo en $public_resources
+    public='no'
+    [[ "$public_resources" == *"|$name|"* ]] && public='yes'
+
+    print_template "$template" \
+        '{RESOURCE_NAME}'  "$name"     \
+        '{COMMENT}'        "$comment"  \
+        '{PATH}'           "$path"     \
+        '{WRITEABLE}'      "no"        \
+        '{PUBLIC}'         "$public"
+}
+
+# Prints the global resources configuration based on the provided resource list
+#
+# Usage:
+#   print_global_resources_conf <resource_list>
 #
 # Parameters:
 #   - resource_list: a list of resources in the format "name|dir|comment"
 #
 # Example
-#   print_guest_resources "$CFG_RESOURCE_LIST"
+#   print_global_resources_conf "$CFG_RESOURCE_LIST"
 #
-print_guest_resources() {
+print_global_resources_conf() {
     local resource_list=$1
+    local template
 
     echo "$resource_list" | \
     while IFS='|' read -r name directory comment; do
-        if [[ $name ]]; then
-            path="$APPDATA/$directory"
-            print_template samba_resource_guest.template \
-                "{RESOURCE_NAME}"    "$name"             \
-                "{RESOURCE_PATH}"    "$path"             \
-                "{RESOURCE_COMMENT}" "$comment"
-        fi
+        [[ -z "$name"           ]] && continue
+        case "$name" in
+             '-'*) continue ;;
+            'w:'*) template='samba_res_writeable.template' ; name=${name:2} ;;
+            'r:'*) template='samba_res_readonly.template'  ; name=${name:2} ;;
+                *) template='samba_res_readonly.template'  ;;
+        esac
+        print_resource_conf "$template" \
+            "$name" "$directory" "$comment" "$CFG_PUBLIC_RESOURCES"
     done
-}
-
-# Prints resource configuration based on name, directory, and comment
-#
-# Usage:
-#   print_resource_conf <name> <directory> <comment>
-#
-# Parameters:
-#   - name     : the name of the resource
-#   - directory: the directory of the resource
-#   - comment  : a comment describing the resource
-#
-# Example:
-#   print_resource_conf "Documents" "docs" "User documents"
-#
-print_resource_conf() {
-    local name=$1 directory=$2 comment=$3
-    path="$APPDATA/$directory"
-
-    message "Building resource $name"
-    print_template "content:$(cat 'samba_resource.template')" \
-        "{RESOURCE_NAME}"    "$name"     \
-        "{RESOURCE_PATH}"    "$path"     \
-        "{RESOURCE_COMMENT}" "$comment"
 }
 
 # Prints user configuration based on username, password, and resources
@@ -356,6 +371,11 @@ process_config_var() {
         NETBIOS)
             CFG_NETBIOS=$(format_value "$value" bool) || return $ERROR
             ;;
+        PUBLIC_RESOURCES)
+            CFG_PUBLIC_RESOURCES=$(format_value "$value" txt) || return $ERROR
+            CFG_PUBLIC_RESOURCES="|$(spaces_to_pipes "$CFG_PUBLIC_RESOURCES")|"
+            echo "## CFG_PUBLIC_RESOURCES = '$CFG_PUBLIC_RESOURCES'"
+            ;;
         PRINT_ERROR)
             echo "ERROR: $value"
             ;;
@@ -437,14 +457,14 @@ echo "-----------------------------"
 message "Generando configuracion"
 print_samba_conf "$CFG_RESOURCE_LIST" > "$SAMBA_CONF_FILE"
 
-# creando configuracion para cada recurso declarado
-echo "$CFG_RESOURCE_LIST" | \
-while IFS='|' read -r name directory comment; do
-    if [[ $name ]]; then
-        resource_conf_file=$(make_resconf_path "$name")
-        print_resource_conf "$name" "$directory" "$comment" > "$resource_conf_file"
-    fi
-done
+# # creando configuracion para cada recurso declarado
+# echo "$CFG_RESOURCE_LIST" | \
+# while IFS='|' read -r name directory comment; do
+#     if [[ $name ]]; then
+#         resource_conf_file=$(make_resconf_path "$name")
+#         print_resource_conf "$name" "$directory" "$comment" > "$resource_conf_file"
+#     fi
+# done
 
 # creando configuracion para cada usuario
 echo "$CFG_USER_LIST" | \
@@ -452,7 +472,7 @@ while IFS='|' read -r username password resources; do
     if [[ -n $username && $username != 'guest' ]]; then
         output_file="$SAMBA_CONF_DIR/$username.conf"
         add_samba_vuser "$username" "$password"
-        print_user_conf "$username" "$password" "$resources" > "$output_file"
+        #print_user_conf "$username" "$password" "$resources" > "$output_file"
     fi
 done
 

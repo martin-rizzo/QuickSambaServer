@@ -51,9 +51,9 @@ COPY                                      \
   templates/avahi_config.template         \
   templates/samba_avahi_service.template  \
   templates/samba_config.template         \
-  templates/samba_resource.template       \
-  templates/samba_resource_ro.template    \
-  templates/samba_resource_guest.template \
+  templates/samba_res_list.template       \
+  templates/samba_res_readonly.template   \
+  templates/samba_res_writeable.template  \
   templates/samba_user.template           \
   ./
 

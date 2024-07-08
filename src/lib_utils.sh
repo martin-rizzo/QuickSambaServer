@@ -58,9 +58,15 @@ function run_as_user() {
 # Example:
 #   is_writable "/path/to/file.txt" "bob"
 #
-function is_writable() {
+is_writable() {
     local filepath=$1 user=$2
     su "$user" -s /bin/sh -c "test -w \"$filepath\""
+}
+
+spaces_to_pipes() {
+    # shellcheck disable=2116
+    output=$(echo $1)
+    echo "${output// /|}"
 }
 
 # Replace placeholders in a template with corresponding values.

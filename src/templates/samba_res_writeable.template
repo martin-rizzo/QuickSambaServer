@@ -1,0 +1,7 @@
+
+[{RESOURCE_NAME}]
+  comment    = {COMMENT}
+  path       = {PATH}
+  browseable = yes
+  writeable  = yes
+  public     = {PUBLIC}

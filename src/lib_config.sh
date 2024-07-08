@@ -40,16 +40,24 @@ NEWLINE="
 # Remove leading and trailing whitespace from a string.
 # Example: trimmed_text=$(trim "  Hello, world!  ")
 #
-function trim() {
+trim() {
     local text="$*"
     text="${text#"${text%%[![:space:]]*}"}"
     echo "${text%"${text##*[![:space:]]}"}"
 }
 
+# Replace spaces with pipe characters in a given string.
+# Example: piped_text=$(spaces_to_pipes "Hello  world!   How are you?")
+#
+spaces_to_pipes() {
+    trim "$(echo "$1" | tr -s ' ')"
+}
+
+
 # Convert text to uppercase.
 # Example: uppercased_text=$(toupper "hello, world!")
 #
-function toupper() {
+toupper() {
     local text="$*"
     echo "$text" | tr '[:lower:]' '[:upper:]'
 }
