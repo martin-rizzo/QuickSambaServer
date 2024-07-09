@@ -182,10 +182,10 @@ push_image() {
         "The file should contain the Docker Hub username on the first line and the token on the second line"
     fi
 
-    # build the image if it does not exist
-    if ! docker_image_exists "$IMAGE_NAME" ; then
-        build_image
-    fi
+    # removes all existing Docker images and containers related
+    # to the project and rebuilds the image from scratch
+    clear_docker_resources
+    build_image
 
     # read Docker Hub credentials from the user_token_file
     while IFS= read -r line; do
@@ -205,9 +205,13 @@ push_image() {
         fatal_error "Docker login failed. Please check your credentials and try again"
     fi
 
-    docker tag "$IMAGE_NAME" "$user/$IMAGE_NAME"
+    # push tags and logout
     docker tag "$IMAGE_NAME" "$user/$IMAGE_NAME:$last_commit_tag"
-    if ! docker push --all-tags "$user/$IMAGE_NAME" ; then
+    if ! docker   push       "$user/$IMAGE_NAME:$last_commit_tag" ; then
+        fatal_error "Failed to push the Docker image"
+    fi
+    docker tag "$IMAGE_NAME" "$user/$IMAGE_NAME:latest"
+    if ! docker   push       "$user/$IMAGE_NAME:latest" ; then
         fatal_error "Failed to push the Docker image"
     fi
     docker logout
