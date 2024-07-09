@@ -1,0 +1,10 @@
+##>
+##> Configuracion para recurso que es utilizada en la declaracion global
+##> --------------------------------------------------------------------
+
+[{RESOURCE_NAME}]
+  comment    = {COMMENT}
+  path       = {PATH}
+  browseable = yes
+  writeable  = {WRITEABLE}
+  public     = {PUBLIC}

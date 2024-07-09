@@ -139,18 +139,18 @@ function for_each_config_var_in() {
 #
 function format_value() {
     local line=$1
-    OLD_IFS=$IFS ; IFS='|'
+    OLD_IFS=$IFS
 
     local first=true
-    for param in $line; do
+    IFS='|' ; for param in $line; do
         local format=$2 ; shift
         param=$(trim "$param")
         case $format in
 
             # resource list - (remove any whitespace)
-            reslist)
-                param=$(echo "$param" | sed 's/ //g')
-                ;;
+            #reslist)
+            #    param=$(echo "$param" | sed 's/ //g')
+            #    ;;
 
             # directory - (remove trailing slashes)
             dir)

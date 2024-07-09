@@ -74,7 +74,7 @@ TEMP_FILE=$(mktemp /tmp/tempfile.XXXXXX)
 # DEFAULT CONFIGURATION
 CFG_RESOURCE_LIST='Files|files|This resource contains files available to all users'
 CFG_USER_LIST='guest||Files'
-CFG_PUBLIC_RESOURCES='||'
+CFG_PUBLIC_RESOURCES=
 CFG_SERVER_NAME=SMBTEST
 CFG_AVAHI=false
 CFG_NETBIOS=true
@@ -221,34 +221,43 @@ print_samba_conf() {
 # Prints resource configuration
 #
 # Usage:
-#   print_resource_conf ????
+#   print_resource_conf <template> <resource_name> <directory> <writeable> <comment> <public_resources>
 #
 # Parameters:
-#   ????
+#   - template     : The template file used for printing the configuration.
+#   - resource_name: The name of the resource.
+#   - directory    : The directory path for the resource.
+#   - writeable    : Indicates if the resource is writeable. Should be 'yes' or 'no'.
+#   - comment      : A comment or description for the resource.
+#   - public_resources: A list of public resources. Must start and end with a space.
 #
 # Example:
-#   ????
+#   print_resource_conf 'resource.template' 'MyResource' 'my/dir' 'yes' 'My comment' ' PublicResource '
 #
 print_resource_conf() {
-    local template=$1 name=$2 directory=$3 comment=$4 public_resources=$5
+    local template=$1 resource_name=$2 directory=$3 writeable=$4 comment=$5 public_resources=$6
     local path public
+
+    # $writeable can be 'yes' or 'no'
+    [[ "$writeable" == 'yes' || "$writeable" == 'no' ]] || \
+        fatal_error "print_resource_conf() requires writeable to be 'yes' or 'no'"
+
+    # $public_resources must start and end with a space
+    [[ "${public_resources:0:1}" == ' ' && "${public_resources: -1}" == ' ' ]] || \
+        fatal_error "print_resource_conf() requires public_resources to start and end with spaces"
 
     path="$APPDATA/$directory"
 
-    # forzar que $public_resources empiece y termine con un pipe '|'
-    [[ "${public_resources:0:1}" != '|' ]] && public_resources="|$public_resources"
-    [[ "${public_resources: -1}" != '|' ]] && public_resources="$public_resources|"
-
-    # hacer el recurso 'public' si el nombre del recurso
-    # esta includo en $public_resources
+    # if the resource name is included in $public_resources
+    # then make the resource 'public'
     public='no'
-    [[ "$public_resources" == *"|$name|"* ]] && public='yes'
+    [[ "$public_resources" == *" $resource_name "* ]] && public='yes'
 
     print_template "$template" \
-        '{RESOURCE_NAME}'  "$name"     \
-        '{COMMENT}'        "$comment"  \
-        '{PATH}'           "$path"     \
-        '{WRITEABLE}'      "no"        \
+        '{RESOURCE_NAME}'  "$resource_name" \
+        '{COMMENT}'        "$comment"       \
+        '{PATH}'           "$path"          \
+        '{WRITEABLE}'      "$writeable"     \
         '{PUBLIC}'         "$public"
 }
 
@@ -258,48 +267,65 @@ print_resource_conf() {
 #   print_global_resources_conf <resource_list>
 #
 # Parameters:
-#   - resource_list: a list of resources in the format "name|dir|comment"
+#   - resource_list: A list of resources in the format "name|dir|comment"
 #
-# Example
+# Example:
 #   print_global_resources_conf "$CFG_RESOURCE_LIST"
+#
+# Note: Stores resource information in 'resource-$resname.data' files
+#       This information will later be used by 'print_user_conf()'
 #
 print_global_resources_conf() {
     local resource_list=$1
-    local template
+    local visible writeable
 
     echo "$resource_list" | \
-    while IFS='|' read -r name directory comment; do
-        [[ -z "$name"           ]] && continue
-        case "$name" in
-             '-'*) continue ;;
-            'w:'*) template='samba_res_writeable.template' ; name=${name:2} ;;
-            'r:'*) template='samba_res_readonly.template'  ; name=${name:2} ;;
-                *) template='samba_res_readonly.template'  ;;
+    while IFS='|' read -r resname directory comment; do
+        case "$resname" in
+               '') continue ;;
+             '-'*) visible='no'  ; writeable='no'  ; resname=${resname#-} ; resname=${resname#-} ;;
+            'w:'*) visible='yes' ; writeable='yes' ; resname=${resname:2} ;;
+            'r:'*) visible='yes' ; writeable='no'  ; resname=${resname:2} ;;
+                *) visible='yes' ; writeable='no'  ;;
         esac
-        print_resource_conf "$template" \
-            "$name" "$directory" "$comment" "$CFG_PUBLIC_RESOURCES"
+        echo "$directory|$comment" > "resource-$resname.data"
+        if [[ "$visible" == 'yes' ]]; then
+            print_resource_conf 'global_resource.template' \
+                "$resname" "$directory" "$writeable" "$comment" "$CFG_PUBLIC_RESOURCES"
+        fi
     done
 }
 
-# Prints user configuration based on username, password, and resources
+# Prints the user custom configuration based on provided user resources list
 #
 # Usage:
-#   print_user_conf <username> <password> <resources>
+#   print_user_conf <username> <resources>
 #
 # Parameters:
-#   - username : the username of the user
-#   - password : the password of the user
-#   - resources: a comma-separated list of resource names
+#   - username : The name of the user.
+#   - resources: A space-separated list of user resources.
 #
 # Example:
-#   print_user_conf "user1" "password123" "Files,Music"
+#   print_user_conf "user1" "w:Files r:Music -Documents"
+#
+# Note: Requires resource information from 'resource-$resname.data' files
+#       which were previously created with 'print_global_resources_conf()'
 #
 print_user_conf() {
-    local username=$1 password=$2 resources=$3
+    local username=$1 resources=$2
+    local visible writeable
 
-    for name in ${resources//,/ } ; do
-        resource_conf_file=$(make_resconf_path "$name")
-        cat "$resource_conf_file"
+    for resname in $resources; do
+        case "$resname" in
+               '') continue ;;
+             '-'*) visible='no'  ; writeable='no'  ; resname=${resname#-} ; resname=${resname#-} ;;
+            'w:'*) visible='yes' ; writeable='yes' ; resname=${resname:2} ;;
+            'r:'*) visible='yes' ; writeable='no'  ; resname=${resname:2} ;;
+                *) visible='yes' ; writeable='no'  ;;
+        esac
+        IFS='|' read -r directory comment < "resource-$resname.data"
+        print_resource_conf 'local_resource.template' \
+            "$resname" "$directory" "$writeable" "$comment" "$CFG_PUBLIC_RESOURCES"
     done
     echo
 }
@@ -344,11 +370,16 @@ start_samba() {
 
 #========================== READING CONFIGURATION ==========================#
 
+# Starts the configuration reading, initializing the temporary variables used
 begin_config() {
+
+    # these temporary variables are used to overwrite the
+    # CFG_RESOURCE_LIST/CFG_USER_LIST configuration variables at the end
     TMP_RESOURCE_LIST=
     TMP_USER_LIST=
 }
 
+# Processes each configuration variable, updating the bash CFG_* variables
 process_config_var() {
     local varname=$1 value=$2
     local ERROR=1
@@ -359,7 +390,7 @@ process_config_var() {
             TMP_RESOURCE_LIST="${TMP_RESOURCE_LIST}${value}$NEWLINE"
             ;;
         USER)
-            value=$(format_value "$value" user pass reslist) || return $ERROR
+            value=$(format_value "$value" user pass txt) || return $ERROR
             TMP_USER_LIST="${TMP_USER_LIST}${value}$NEWLINE"
             ;;
         SERVER_NAME)
@@ -372,9 +403,7 @@ process_config_var() {
             CFG_NETBIOS=$(format_value "$value" bool) || return $ERROR
             ;;
         PUBLIC_RESOURCES)
-            CFG_PUBLIC_RESOURCES=$(format_value "$value" txt) || return $ERROR
-            CFG_PUBLIC_RESOURCES="|$(spaces_to_pipes "$CFG_PUBLIC_RESOURCES")|"
-            echo "## CFG_PUBLIC_RESOURCES = '$CFG_PUBLIC_RESOURCES'"
+            CFG_PUBLIC_RESOURCES="$(format_value "$value" txt)" || return $ERROR
             ;;
         PRINT_ERROR)
             echo "ERROR: $value"
@@ -382,7 +411,11 @@ process_config_var() {
     esac
 }
 
+# Finalizes the configuration reading, adjusting the processed values
 end_config() {
+
+    # if any resource or user was configured, then overwrite
+    # the default CFG_RESOURCE_LIST/CFG_USER_LIST configuration
     TMP_RESOURCE_LIST=$(trim "$TMP_RESOURCE_LIST")
     if [[ "$TMP_RESOURCE_LIST" ]]; then
         CFG_RESOURCE_LIST=$TMP_RESOURCE_LIST
@@ -392,6 +425,9 @@ end_config() {
         CFG_USER_LIST=$TMP_USER_LIST
     fi
     unset TMP_RESOURCE_LIST TMP_USER_LIST
+
+    # CFG_PUBLIC_RESOURCES must always start and end with a space!
+    CFG_PUBLIC_RESOURCES=" $CFG_PUBLIC_RESOURCES "
 }
 
 #===========================================================================#
@@ -454,17 +490,9 @@ echo "$CFG_USER_LIST"
 echo "-----------------------------"
 
 # creando configuracion principal de samba
+# en la cual tambien se incluye la configuracion global de los recursos
 message "Generando configuracion"
 print_samba_conf "$CFG_RESOURCE_LIST" > "$SAMBA_CONF_FILE"
-
-# # creando configuracion para cada recurso declarado
-# echo "$CFG_RESOURCE_LIST" | \
-# while IFS='|' read -r name directory comment; do
-#     if [[ $name ]]; then
-#         resource_conf_file=$(make_resconf_path "$name")
-#         print_resource_conf "$name" "$directory" "$comment" > "$resource_conf_file"
-#     fi
-# done
 
 # creando configuracion para cada usuario
 echo "$CFG_USER_LIST" | \
@@ -472,9 +500,10 @@ while IFS='|' read -r username password resources; do
     if [[ -n $username && $username != 'guest' ]]; then
         output_file="$SAMBA_CONF_DIR/$username.conf"
         add_samba_vuser "$username" "$password"
-        #print_user_conf "$username" "$password" "$resources" > "$output_file"
+        print_user_conf "$username" "$resources" > "$output_file"
     fi
 done
+
 
 remove_all_resconf_files
 

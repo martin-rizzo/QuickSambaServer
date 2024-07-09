@@ -63,12 +63,6 @@ is_writable() {
     su "$user" -s /bin/sh -c "test -w \"$filepath\""
 }
 
-spaces_to_pipes() {
-    # shellcheck disable=2116
-    output=$(echo $1)
-    echo "${output// /|}"
-}
-
 # Replace placeholders in a template with corresponding values.
 #
 # Usage:
@@ -93,13 +87,14 @@ spaces_to_pipes() {
 #
 function print_template() {
     local template=$1 ; shift
+    local comment_tag='##>'
 
     # if the template starts with 'content:', treat it as a string.
     # Otherwise, treat it as a filename and read its content.
     if [[ "$template" == content:* ]]; then
-        template=${template#content:}
+        template=$(echo "${template#content:}" | grep -v "^$comment_tag")
     elif [[ -f "$template" ]]; then
-        template=$(cat "$template")
+        template=$(grep -v "^$comment_tag" "$template")
     else
         fatal_error "Template file '${template:0:64}' not found"
     fi
