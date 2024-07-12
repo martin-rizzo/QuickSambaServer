@@ -43,7 +43,7 @@
 #
 PROJECT_DIR=$(realpath "$(dirname "${BASH_SOURCE[0]}")" )
 IMAGE_NAME='quick-samba-server'
-IMAGE_VER='0.1'
+IMAGE_USER='martinrizzo'
 CONTAINER_NAME='samba-server'
 
 # DEFAULT
@@ -64,8 +64,6 @@ CONTAINER_PARAMETERS="
 # AVAHI: -p 5353:5353 --network host
 
 LOG_LEVEL='debug'  # | debug | info | warn | error | fatal |
-NEWLINE='
-'
 
 #---------------------------- MESSAGE HANDLING -----------------------------#
 
@@ -140,7 +138,7 @@ docker_container_exists() {
 
 #-------------------------------- COMMANDS ---------------------------------#
 
-# Build the container
+# Build the Docker image using the current source code
 build_image() {
 
     # if the image already exists then do nothing
@@ -157,8 +155,9 @@ build_image() {
     echo "Done! The container has been built."
 }
 
-# Upload local changes to the remote repository
-push_image() {
+# Build the latest released version and optionally push it to Docker Hub
+build_last_release() {
+    local push=$1
     local user token last_commit last_commit_tag
     local user_token_file="$PROJECT_DIR/docker-cmd.token"
 
@@ -172,8 +171,37 @@ push_image() {
     last_commit=$(git rev-parse HEAD)
     last_commit_tag=$(git describe --exact-match --tags "$last_commit" 2>/dev/null)
     if [[ -z "$last_commit_tag" ]]; then
-        fatal_error "No tag found on the latest commit" \
-        "Please tag your latest commit before pushing the image"
+        fatal_error "No tag found on the latest commit." \
+        "Please check out the specific tag you want to generate."
+    fi
+
+    # read Docker Hub credentials from the user_token_file
+    if [[ -e "$user_token_file" ]]; then
+        while IFS= read -r line; do
+            [[ -z "$line" || "$line" =~ ^[[:space:]]*# ]] && continue
+            if [[ -z "$user" ]]; then
+                user="$line"
+            else
+                token="$line"
+                break
+            fi
+        done < "$user_token_file"
+    fi
+
+    # removes all existing Docker images and containers related
+    # to the project and rebuilds the image from scratch
+    clear_docker_resources
+    build_image
+
+    # generate container tags and remove intermediate resources
+    user=${user:-$IMAGE_USER}
+    docker tag "$IMAGE_NAME" "$user/$IMAGE_NAME:$last_commit_tag"
+    docker tag "$IMAGE_NAME" "$user/$IMAGE_NAME:latest"
+    clear_docker_resources
+
+    # if not pushing to Docker Hub, the function ends here
+    if [[ "$push" != 'push' ]]; then
+        return 0
     fi
 
     # check if the user/token file exists
@@ -182,23 +210,6 @@ push_image() {
         "The file should contain the Docker Hub username on the first line and the token on the second line"
     fi
 
-    # removes all existing Docker images and containers related
-    # to the project and rebuilds the image from scratch
-    clear_docker_resources
-    build_image
-
-    # read Docker Hub credentials from the user_token_file
-    while IFS= read -r line; do
-        if [[ -n "$line" && ! "$line" =~ ^[[:space:]]*# ]]; then
-            if [[ -z "$user" ]]; then
-                user="$line"
-            else
-                token="$line"
-                break
-            fi
-        fi
-    done < "$user_token_file"
-
     # login to Docker Hub
     echo "$token" | docker login --username "$user" --password-stdin
     if [[ $? -ne 0 ]]; then
@@ -206,12 +217,10 @@ push_image() {
     fi
 
     # push tags and logout
-    docker tag "$IMAGE_NAME" "$user/$IMAGE_NAME:$last_commit_tag"
-    if ! docker   push       "$user/$IMAGE_NAME:$last_commit_tag" ; then
+    if ! docker push "$user/$IMAGE_NAME:$last_commit_tag" ; then
         fatal_error "Failed to push the Docker image"
     fi
-    docker tag "$IMAGE_NAME" "$user/$IMAGE_NAME:latest"
-    if ! docker   push       "$user/$IMAGE_NAME:latest" ; then
+    if ! docker push "$user/$IMAGE_NAME:latest" ; then
         fatal_error "Failed to push the Docker image"
     fi
     docker logout
@@ -361,18 +370,19 @@ Options:
   -v, --version  Display version information and exit
 
 Commands:
-  build            Build the Docker image
-  clean            Clear Docker resources
-  list             List Docker information
-  run[number]      Run the example specified by [number] as root
-  urun[number]     Run the example specified by [number] as an unprivileged user
-  stop             Stop the Docker container
-  restart          Restart the Docker container
-  console          Open a console in the Docker container
-  push             ...
-  logs             Show Docker container logs
-  exec             Execute a command in the Docker container
-  status           Show the status of the Docker container
+  build               Build the current Docker image
+  clean               Clear Docker resources
+  list                List Docker information
+  run[number]         Run the example specified by [number] as root
+  urun[number]        Run the example specified by [number] as an unprivileged user
+  stop                Stop the Docker container
+  restart             Restart the Docker container
+  console             Open a console in the Docker container
+  build-last-release  Build the latest released version of the Docker image
+  push                Push the latest version of the Docker image to Docker Hub
+  logs                Show Docker container logs
+  exec                Execute a command in the Docker container
+  status              Show the status of the Docker container
 
   To clean Docker resources:
     ./docker-cmd.sh clean
@@ -394,8 +404,7 @@ for param in "$@"; do
             echo "$HELP" ; exit 0
             ;;
         -v|--version)
-            echo $IMAGE_NAME $IMAGE_VER
-            exit 0
+            echo "${0##*/}" "v0.1" ; exit 0
             ;;
         -*)
             fatal_error "Option '$param' is not supported"
@@ -446,8 +455,11 @@ while [[ $# -gt 0 ]]; do
         console)
             open_console_in_container
             ;;
+        build-last-release)
+            build_last_release
+            ;;
         push)
-            push_image
+            build_last_release 'push'
             ;;
         list)
             list_docker_info
