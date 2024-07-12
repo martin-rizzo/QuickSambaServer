@@ -12,37 +12,39 @@
 # QuickSambaServer
 -->
 
-**QuickSambaServer** makes setting up a file server easy, with simple configuration for both resources and users. It's perfect for domestic environments or secure, private settings with trusted individuals. This tool is ideal for sharing files or disk drives among family members or within small businesses, allowing everyone to access and store data centrally.
+**QuickSambaServer** makes setting up a file server easy, with simple configuration for both resources and users. It's perfect for domestic environments or private settings with trusted individuals. This tool is ideal for sharing files or disk drives among family members or within small businesses, allowing everyone to access and store data centrally.
 
 ## Getting Started
 
-You can easily build the QuickSambaServer image from the source code or obtain the image from Docker Hub. Follow the instructions below to use the command line or graphical interfaces:
+You can either build the QuickSambaServer image from the source code or pull the pre-built image from Docker Hub.
 
-### Command Line - Source Code
+### Building the Image from Source
 
-#### Clone the Project and Build the Image
+To build the image from the source code, follow these steps:
 
-To obtain the project using Git and generate the image, execute the following commands:
+  1. Clone the repository:
   ```bash
   git clone https://github.com/martin-rizzo/QuickSambaServer.git
   cd QuickSambaServer
+  ```
+
+  2. Build the image:
+  ```bash
   ./docker-cmd.sh build-last-release
   ```
 
-### Command Line - Docker Hub
+### Pulling the Image from Docker Hub
 
-#### Pull the Image from Docker Hub
-
-To pull the QuickSambaServer image from Docker Hub, use the following command:
+To pull the pre-built image from Docker Hub:
   ```bash
   docker pull martinrizzo/quick-samba-server
   ```
 
 ### Running the Container
 
-#### Run the Container as the Current User
+#### Using the Command Line
 
-To run the container using your current user, execute:
+To run the container using your current user:
   ```bash
   docker run -d \
       -e USER_ID=$(id -u) -e GROUP_ID=$(id -g) \
@@ -53,9 +55,7 @@ To run the container using your current user, execute:
       martinrizzo/quick-samba-server
   ```
 
-#### Run the Container as 'samba' User and Group
-
-To run the container using the 'samba' user and group, execute:
+To run the container using the 'samba' user and group:
   ```bash
   docker run -d \
       -e USER_ID=$(id -u samba) -e GROUP_ID=$(id -g samba) \
@@ -66,15 +66,15 @@ To run the container using the 'samba' user and group, execute:
       martinrizzo/quick-samba-server
   ```
 
-### Graphical Interface (Docker Desktop)
+#### Using Graphical Interfaces (Docker Desktop)
 
   1. Open Docker Desktop.
   2. Navigate to the "Images" tab.
   3. Search for `martinrizzo/quick-samba-server` and pull the image.
-  4. Go to the "Containers/Apps" tab, locate the pulled image, and click on "Run".
-  5. Configure the necessary settings, such as volume mappings and port forwarding, and then start the container.
+  4. Go to the "Containers/Apps" tab, locate the pulled image, and click "Run".
+  5. Configure the settings, such as volume mappings and port forwarding, then start the container.
 
-### Graphical Interface (Cockpit + Podman)
+#### Using Graphical Interfaces (Cockpit + Podman)
 
   1. Open Cockpit in your web browser.
   2. Navigate to the "Podman Containers" section.
@@ -82,9 +82,8 @@ To run the container using the 'samba' user and group, execute:
   4. Pull the image by clicking the corresponding button.
   5. After the image is pulled, click on "Create Container".
   6. Configure the container settings, such as volume mappings and port forwarding.
-  7. Click on "Create and Run" to start the container.
+  7. Click "Create and Run" to start the container.
 
-  
 ## Testing the Included Examples
 
 To install and test any of the examples included in this project, follow these steps:
