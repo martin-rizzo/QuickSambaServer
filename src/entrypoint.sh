@@ -44,9 +44,14 @@ unset USER_ID GROUP_ID LOG_DIR
 # CONSTANTS
 PROJECT_NAME=QuickSambaServer         # qss
 CONFIG_NAME=samba.config              # qss config file
-QSERVER_USER=qserver                  # qss main user & group
+QSERVER_DEFAULT_USER=qserver          # qss default user name
+QSERVER_DEFAULT_GROUP=qserver         # qss default group name
 QSERVER_VUSER_TAG=__QSERVER_VUSER__   # qss virtual user tag
 SCRIPT_DIR=$(dirname "$0")
+
+
+QSERVER_USER=   # qss main user
+QSERVER_GROUP=  # qss main group
 
 APP=$SCRIPT_DIR
 APPDATA=/appdata
@@ -82,41 +87,41 @@ CFG_NETBIOS=true
 
 #================================== USERS ==================================#
 
-# Ensure the existence of the main qserver user and group.
-#
-# Usage:
-#   ensure_qserver_user_and_group
-#
-# Description:
-#   If the QSERVER_USER_ID and QSERVER_GROUP_ID do not exist,
-#   it creates them using the provided IDs and names.
-#
-# Output Globals:
-#   QSERVER_USER  : The name of the main quickserver user.
-#   QSERVER_GROUP : The name of the main quickserver group.
-#
-ensure_qserver_user_and_group() {
-    local user_name=$1 user_id=$2 group_name=$3 group_id=$4
-    message '{'
+add_qserver_group() {
+    local group_id=$1
 
-    # create 'group_id' if it don't exist
-    if ! getent group $group_id $>/dev/null; then
-        message "creating system group : $group_name [$group_id]"
-        addgroup "$group_name" -g $group_id
-    else
-        group_name=$(getent group $group_id | cut -d: -f1)
+    # si el sistema ya tiene definido a 'group_id'
+    # entonces retornar el nombre de ese grupo en stdout
+    if  getent group "$group_id" &>/dev/null; then
+        getent group "$group_id" | cut -d: -f1
+        return
     fi
-    QSERVER_GROUP=$group_name
 
-    # create 'user_id' if it don't exist
-    if ! getent passwd "$user_id" &>/dev/null; then
-        message "creating system user  : $user_name [$user_id]"
-        add_system_user "$user_name:$user_id" "$group_name" '/home' "$PROJECT_NAME"
-    else
-        user_name=$(getent passwd $user_id | cut -d: -f1)
+    # create 'group_id' utilizando el nombre default
+    message "creating system group : $QSERVER_DEFAULT_GROUP [$group_id]"
+    addgroup "$QSERVER_DEFAULT_GROUP" -g "$group_id"
+    echo "$QSERVER_DEFAULT_GROUP"
+}
+
+add_qserver_user() {
+    local user_id=$1 group_name=$2
+
+    # si el sistema ya tiene definido a 'user_id'
+    # entonces retornar el nombre de ese usuario en stdout
+    if  getent passwd "$user_id" &>/dev/null; then
+        getent passwd "$user_id" | cut -d: -f1
+        return
     fi
-    QSERVER_USER=$user_name
-    message '}'
+
+    # create 'user_id' utilizando el nombre default
+    message "creating system user  : $QSERVER_DEFAULT_USER [$user_id]"
+    add_system_user "$QSERVER_DEFAULT_USER:$user_id" "$group_name" '/home' "$PROJECT_NAME"
+    echo "$QSERVER_DEFAULT_USER"
+}
+
+remove_qserver_user_and_group() {
+    groupdel   "$QSERVER_DEFAULT_GROUP" &>/dev/null
+    userdel -r "$QSERVER_DEFAULT_USER"  &>/dev/null
 }
 
 # Adds a Samba virtual user with the specified username and password
@@ -138,12 +143,12 @@ add_samba_vuser() {
     if ! user_exists "$username"; then
         echo "$username:x:$QSERVER_USER_ID:$QSERVER_GROUP_ID:$QSERVER_VUSER_TAG:/home:/sbin/nologin" >> /etc/passwd
     else
-        fatal_error "The user $username already exists in the system"
+        internal_error "The user $username already exists in the system"
     fi
 
     # register user in Samba
-    echo -e "$password\n$password" | smbpasswd -a -c "$SAMBA_CONF_FILE" -s "$username"
-    echo "Samba virtual user created: $username"
+    echo -e "$password\n$password" | smbpasswd -a -c "$SAMBA_CONF_FILE" -s "$username" 1>/dev/null
+    message "Samba virtual user created: $username"
 }
 
 # Removes all users previously created with 'add_samba_vuser()'
@@ -176,15 +181,15 @@ remove_all_samba_vusers() {
 # Example:
 #   files_conf_path=$(make_resconf_path "Files" "rw")
 #
-make_resconf_path() {
-    local resource_name=$1 mode=${2:-'def'}
-    echo "$SAMBA_CONF_DIR/$resource_name-$mode.resconf"
+get_res_config_path() {
+    local resource_name=$1
+    echo "$SAMBA_CONF_DIR/$resource_name.res_config"
 }
 
-# Removes all temporary resource configuration files created by 'make_resconf_path()'
+# Removes all temporary resource configuration files created by 'get_res_config_path()'
 #
-remove_all_resconf_files() {
-    rm -f "$SAMBA_CONF_DIR"/*.resconf
+remove_all_res_config_files() {
+    rm -f "$SAMBA_CONF_DIR"/*.res_config
 }
 
 
@@ -240,7 +245,7 @@ print_resource_conf() {
 
     # $writeable can be 'yes' or 'no'
     [[ "$writeable" == 'yes' || "$writeable" == 'no' ]] || \
-        fatal_error "print_resource_conf() requires writeable to be 'yes' or 'no'"
+        fatal_error "print_resource_conf() requires \$writeable to be 'yes' or 'no'. You provided '$writeable' instead"
 
     # $public_resources must start and end with a space
     [[ "${public_resources:0:1}" == ' ' && "${public_resources: -1}" == ' ' ]] || \
@@ -313,7 +318,7 @@ print_global_resources_conf() {
 #
 print_user_conf() {
     local username=$1 resources=$2
-    local visible writeable
+    local template visible writeable
 
     for resname in $resources; do
         case "$resname" in
@@ -321,8 +326,16 @@ print_user_conf() {
              '-'*) visible='no'  ; writeable='no'  ; resname=${resname#-} ; resname=${resname#-} ;;
             'w:'*) visible='yes' ; writeable='yes' ; resname=${resname:2} ;;
             'r:'*) visible='yes' ; writeable='no'  ; resname=${resname:2} ;;
-                *) visible='yes' ; writeable='no'  ;;
+                *) visible='yes' ; writeable='no' ;;
         esac
+
+        local template='local_resource.template'
+        #if [[ $visible == 'no' ]]; then
+        #    template='invisible_resource.template'
+        #elif [[ $writeable == 'default' ]]; then
+        #    template=$(get_res_config_path "$resname")
+        #fi
+
         IFS='|' read -r directory comment < "resource-$resname.data"
         print_resource_conf 'local_resource.template' \
             "$resname" "$directory" "$writeable" "$comment" "$CFG_PUBLIC_RESOURCES"
@@ -438,39 +451,51 @@ end_config() {
 source "$SCRIPT_DIR/lib_config.sh"  # functions for reading config files
 source "$SCRIPT_DIR/lib_logfile.sh" # functions for handling logging messages
 source "$SCRIPT_DIR/lib_utils.sh"   # miscellaneous utility functions
-
 echo -e '\n-----------------------------------------------------------'
 echo -e "$BLUE$0"
 
+
+# before starting, perform several validations:
+#   1) Validate that the script is being executed with a privileged user
+#   2) Validate that the /appdata volume is correctly mounted
+#   3) Validate QSERVER_USER_ID and QSERVER_GROUP_ID
+#
+if ! is_root; then
+    fatal_error "This Docker container can only be run with a privileged user"
+fi
+if [[ ! -d "$APPDATA" ]]; then
+    fatal_error "The directory '$APPDATA' has not been correctly mounted" \
+                "The Docker command might be missing the parameter -v {DIR_TO_MOUNT}:/appdata" \
+                "There might also be issues with SELinux (verify the SELinux settings or try disabling it temporarily)"
+fi
 message "Validating USER_ID"  # QSERVER_USER_ID
 if ! validate_integer "$QSERVER_USER_ID" ; then
     fatal_error "USER_ID must be a valid integer value"
 fi
-
 message "Validating GROUP_ID" # QSERVER_GORUP_ID
 if ! validate_integer "$QSERVER_GROUP_ID" ; then
     fatal_error "GROUP_ID must be a valid integer value"
 fi
 
-if is_root; then
-    message "Ensuring existence of main user/group [$QSERVER_USER_ID/$QSERVER_GROUP_ID]"
-    ensure_qserver_user_and_group           \
-        "$QSERVER_USER" "$QSERVER_USER_ID"  \
-        "$QSERVER_USER" "$QSERVER_GROUP_ID"
-fi
 
+# proceed with the system initialization:
+#   1) Ensure the existence of the main user/group with the provided IDs
+#   2) Activate the log file
+#   3) Switch to the app's directory
+#
+message "Ensuring existence of main user/group [$QSERVER_USER_ID/$QSERVER_GROUP_ID]"
+  remove_qserver_user_and_group
+  QSERVER_GROUP=$(add_qserver_group "$QSERVER_GROUP_ID") || exit 1
+  QSERVER_USER=$(add_qserver_user   "$QSERVER_USER_ID" "$QSERVER_GROUP") || exit 1
 message "Activating the log file for this script: $QSERVER_LOG_FILE"
-set_logfile "$QSERVER_LOG_FILE"
-
+  set_logfile "$QSERVER_LOG_FILE"
 message "Switching to the app's directory: $APP"
-cd "$APP" \
- || fatal_error "Failed to change directory to $APP"
+  cd "$APP" \
+   || fatal_error "Failed to change directory to $APP"
 
-#message "Removing any previous samba configurations"
-#rm -f "$SAMBA_CONF_DIR/*"
-#rm -f "/$VIRTUAL_USERS_DIR/*"
-#remove_all_samba_vusers
 
+# if the configuration file exists, process it variable by variable.
+# otherwise, use the default configuration.
 if [[ -f "$QSERVER_CONFIG_FILE" ]]; then
     message "Processing configuration file: $QSERVER_CONFIG_FILE"
     begin_config
@@ -478,23 +503,19 @@ if [[ -f "$QSERVER_CONFIG_FILE" ]]; then
     end_config
 else
     message "No configuration file found ($QSERVER_CONFIG_FILE)"
-    message "Usando la configuracion default"
+    message "Using default configuration"
 fi
 
-
-echo "-----------------------------"
-echo "CFG_RESOURCE_LIST:"
-echo "$CFG_RESOURCE_LIST"
-echo "CFG_USER_LIST:"
-echo "$CFG_USER_LIST"
-echo "-----------------------------"
-
-# creando configuracion principal de samba
-# en la cual tambien se incluye la configuracion global de los recursos
+# generate main samba configuration
+# (temporary resource configuration files will also be created here)
 message "Generando configuracion"
 print_samba_conf "$CFG_RESOURCE_LIST" > "$SAMBA_CONF_FILE"
 
-# creando configuracion para cada usuario
+# remove any previously created users
+message "Resetting virtual users"
+remove_all_samba_vusers
+
+# create configuration for each user
 echo "$CFG_USER_LIST" | \
 while IFS='|' read -r username password resources; do
     if [[ -n $username && $username != 'guest' ]]; then
@@ -504,16 +525,9 @@ while IFS='|' read -r username password resources; do
     fi
 done
 
-
-remove_all_resconf_files
-
-
-#
-#message "Creating vsftpd configuration file: $VSFTPD_CONF_FILE"
-#create_vsftpd_conf "$VSFTPD_CONF_FILE"
-#
-#message "Creating Linux users"
-#create_qftp_users "$CFG_USER_LIST" "$CFG_RESOURCE_LIST"
+# remove temporary resource configuration files
+# created during the main configuration generation
+remove_all_res_config_files
 
 if [[ "$CFG_AVAHI" == true ]]; then
     message "Launching Avahi service"
@@ -527,7 +541,6 @@ fi
 
 message "Starting SAMBA service"
 start_samba "$SAMBA_CONF_FILE"
-
 
 
 ## hack
