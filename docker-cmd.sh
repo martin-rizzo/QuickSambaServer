@@ -54,14 +54,19 @@ CONTAINER_PARAMETERS="
        -p 445:445
 "
 
-# AHAVI
-CONTAINER_PARAMETERS="
-       {--USER}
-       -v {DIR_TO_MOUNT}:/appdata:Z
-       --network host
-"
+# # AHAVI
+# CONTAINER_PARAMETERS="
+#        {--USER}
+#        -v {DIR_TO_MOUNT}:/appdata:Z
+#        --network host
+# "
 
-# AVAHI: -p 5353:5353 --network host
+# # ERROR
+# CONTAINER_PARAMETERS="
+#        {--USER}
+#        -p 139:139
+#        -p 445:445
+# "
 
 LOG_LEVEL='debug'  # | debug | info | warn | error | fatal |
 
@@ -332,7 +337,7 @@ remove_container() {
 }
 
 restart_container() {
-    stop_container && run_container
+    docker restart $CONTAINER_NAME
 }
 
 open_console_in_container() {
