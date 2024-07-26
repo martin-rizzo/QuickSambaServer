@@ -69,49 +69,82 @@ CFG_AVAHI=false
 CFG_NETBIOS=true
 
 
-#================================== USERS ==================================#
+#============================ MAIN SYSTEM USERS ============================#
 
+# Adds a system group with the specified group ID
+#
+# Usage: add_qserver_group <group_id>
+#
+# Parameters:
+#   - group_id: the ID for the system group
+#
+# Note:
+#   Returns the name of the group that was added via stdout.
+#   This can be captured using command substitution `$(..)`.
+#
+# Example:
+#   QSERVER_GROUP=$(add_qserver_group 1000) || exit 1
+#
 add_qserver_group() {
     local group_id=$1
 
-    # si el sistema ya tiene definido a 'group_id'
-    # entonces retornar el nombre de ese grupo en stdout
+    # if the system already has 'group_id' defined
+    # then return the name of that group in stdout
     if  getent group "$group_id" &>/dev/null; then
         getent group "$group_id" | cut -d: -f1
         return
     fi
 
-    # create 'group_id' utilizando el nombre default
+    # create 'group_id' using the default name
     message "creating system group : $QSERVER_DEFAULT_GROUP [$group_id]"
     addgroup "$QSERVER_DEFAULT_GROUP" -g "$group_id"
     echo "$QSERVER_DEFAULT_GROUP"
 }
 
+# Adds a system user with the specified user ID and group name
+#
+# Usage: add_qserver_user <user_id> <group_name>
+#
+# Parameters:
+#   - user_id   : the ID for the system user
+#   - group_name: the name of the group to which the user belongs
+#
+# Note:
+#   Returns the name of the user that was added via stdout.
+#   This can be captured using command substitution `$(..)`.
+#
+# Example:
+#   QSERVER_USER=$(add_qserver_user 1001 "qserver_group") || exit 1
+#
 add_qserver_user() {
     local user_id=$1 group_name=$2
 
-    # si el sistema ya tiene definido a 'user_id'
-    # entonces retornar el nombre de ese usuario en stdout
+    # if the system already has 'user_id' defined
+    # then return the name of that user in stdout
     if  getent passwd "$user_id" &>/dev/null; then
         getent passwd "$user_id" | cut -d: -f1
         return
     fi
 
-    # create 'user_id' utilizando el nombre default
+    # create 'user_id' using the default name
     message "creating system user  : $QSERVER_DEFAULT_USER [$user_id]"
     add_system_user "$QSERVER_DEFAULT_USER:$user_id" "$group_name" '/home' "$PROJECT_NAME"
     echo "$QSERVER_DEFAULT_USER"
 }
 
+# Removes previously created qserver user and group.
+#
 remove_qserver_user_and_group() {
     groupdel   "$QSERVER_DEFAULT_GROUP" &>/dev/null
     userdel -r "$QSERVER_DEFAULT_USER"  &>/dev/null
 }
 
+
+#============================== VIRTUAL USERS ==============================#
+
 # Adds a Samba virtual user with the specified username and password
 #
-# Usage:
-#   add_samba_vuser <username> <password>
+# Usage: add_samba_vuser <username> <password>
 #
 # Parameters:
 #   - username: the username for the Samba virtual user
@@ -155,8 +188,7 @@ remove_all_samba_vusers() {
 
 # Generates the full path for a temporary resource configuration file
 #
-# Usage:
-#   make_resconf_path <resource_name> [mode]
+# Usage: make_resconf_path <resource_name> [mode]
 #
 # Parameters:
 #   - resource_name: the name of the resource, e.g., "Files", "Music"
@@ -170,7 +202,7 @@ get_res_config_path() {
     echo "$SAMBA_CONF_DIR/$resource_name.res_config"
 }
 
-# Removes all temporary resource configuration files created by 'get_res_config_path()'
+# Removes all temporary resource config files created by 'get_res_config_path()'
 #
 remove_all_res_config_files() {
     rm -f "$SAMBA_CONF_DIR"/*.res_config
@@ -181,8 +213,7 @@ remove_all_res_config_files() {
 
 # Prints the complete samba configuration
 #
-# Usage:
-#   print_samba_conf <resource_list> [template_file]
+# Usage: print_samba_conf <resource_list> [template_file]
 #
 # Parameters:
 #   - resource_list: a list of resources in the format "name|dir|comment"
@@ -209,8 +240,7 @@ print_samba_conf() {
 
 # Prints resource configuration
 #
-# Usage:
-#   print_resource_conf <template> <resource_name> <directory> <writeable> <comment> <public_resources>
+# Usage: print_resource_conf <template> <resource_name> <directory> <writeable> <comment> <public_resources>
 #
 # Parameters:
 #   - template     : The template file used for printing the configuration.
@@ -252,17 +282,17 @@ print_resource_conf() {
 
 # Prints the global resources configuration based on the provided resource list
 #
-# Usage:
-#   print_global_resources_conf <resource_list>
+# Usage:  print_global_resources_conf <resource_list>
 #
 # Parameters:
 #   - resource_list: A list of resources in the format "name|dir|comment"
 #
+# Note:
+#   Stores resource information in 'resource-$resname.data' files
+#   This information will later be used by 'print_user_conf()'
+#
 # Example:
 #   print_global_resources_conf "$CFG_RESOURCE_LIST"
-#
-# Note: Stores resource information in 'resource-$resname.data' files
-#       This information will later be used by 'print_user_conf()'
 #
 print_global_resources_conf() {
     local resource_list=$1
@@ -287,18 +317,18 @@ print_global_resources_conf() {
 
 # Prints the user custom configuration based on provided user resources list
 #
-# Usage:
-#   print_user_conf <username> <resources>
+# Usage:  print_user_conf <username> <resources>
 #
 # Parameters:
 #   - username : The name of the user.
 #   - resources: A space-separated list of user resources.
 #
+# Note:
+#   Requires resource information from 'resource-$resname.data' files
+#   which were previously created with 'print_global_resources_conf()'
+#
 # Example:
 #   print_user_conf "user1" "w:Files r:Music -Documents"
-#
-# Note: Requires resource information from 'resource-$resname.data' files
-#       which were previously created with 'print_global_resources_conf()'
 #
 print_user_conf() {
     local username=$1 resources=$2
@@ -330,36 +360,58 @@ print_user_conf() {
 
 #========================== CONTROLLING SERVICES ===========================#
 
+# Launches the Avahi daemon, automatically generating configuration files.
+# This function sets up Avahi to advertise the Samba service on the network.
+#
 launch_avahi() {
-    print_template samba_avahi_service.template \
-        '{SERVER_NAME}'  "$CFG_SERVER_NAME" \
-        > "/etc/avahi/services/smb.service"
 
+    # generate the main Avahi config file
     print_template avahi_config.template \
         '{AVAHI_SERVER}'  "null" \
         > "$AVAHI_CONF_FILE"
 
+    # generate the config file for advertising the Samba service via Avahi
+    print_template samba_avahi_service.template \
+        '{SERVER_NAME}'  "$CFG_SERVER_NAME" \
+        > "/etc/avahi/services/smb.service"
+
+    # launch the Avahi daemon in the background
     avahi-daemon --daemonize --file="$AVAHI_CONF_FILE"
+
+    # check if the Avahi daemon is running
     if avahi-daemon --check; then
-        message "Avahi daemon launched"
+        message 'Avahi daemon launched'
     else
-        fatal_error 'Imposible lanzar el avahi daemon'
+        fatal_error 'Impossible to launch the Avahi daemon'
     fi
 }
 
+# Stops the Avahi daemon
+#
 kill_avahi() {
     avahi-daemon --kill
 }
 
+# Launches the NetBIOS daemon with the specified configuration file
+#
 launch_netbios() {
     local config_file=$1
+
+    # launch the NetBIOS daemon in the background
     nmbd --daemon --configfile="$config_file" --no-process-group
+
+    # check if the NetBIOS daemon is running
+    # ????
 }
 
+# Stops the NetBIOS daemon
+#
 kill_netbios() {
     exit 0
 }
 
+# Starts the Samba daemon with the specified configuration file.
+#
 start_samba() {
     local config_file=$1
     exec ionice -c 3 smbd \
@@ -531,6 +583,3 @@ message "Starting SAMBA service"
 start_samba "$SAMBA_CONF_FILE"
 
 
-## hack
-#chown $USER_NAME:$GROUP_NAME "$VSFTPD_LOG_FILE"
-#chown $USER_NAME:$GORUP_NAME "$QFTP_LOG_FILE"
