@@ -30,51 +30,35 @@
 #     TORT OR OTHERWISE, ARISING FROM,OUT OF OR IN CONNECTION WITH THE
 #     SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
-#
-# variables configurables:
-#  - USER_ID
-#  - GROUP_ID
-#  - LOG_DIR
-#
-QSERVER_USER_ID=${USER_ID:-$(id -u)}
-QSERVER_GROUP_ID="${GROUP_ID:-$(id -g)}"
-QSERVER_LOG_DIR="${LOG_DIR:-log}"
-unset USER_ID GROUP_ID LOG_DIR
+
+# INPUT: USER_ID, GROUP_ID
+QSERVER_USER=                            # qss main user
+QSERVER_GROUP=                           # qss main group
+QSERVER_USER_ID=${USER_ID:-$(id -u)}     # qss main user-id
+QSERVER_GROUP_ID="${GROUP_ID:-$(id -g)}" # qss main group-id
+unset USER_ID GROUP_ID
 
 # CONSTANTS
-PROJECT_NAME=QuickSambaServer         # qss
-CONFIG_NAME=samba.config              # qss config file
-QSERVER_DEFAULT_USER=qserver          # qss default user name
-QSERVER_DEFAULT_GROUP=qserver         # qss default group name
-QSERVER_VUSER_TAG=__QSERVER_VUSER__   # qss virtual user tag
+PROJECT_NAME=QuickSambaServer            # qss
+CONFIG_NAME=samba.config                 # qss config file
+QSERVER_DEFAULT_USER=qserver             # qss default user name
+QSERVER_DEFAULT_GROUP=qserver            # qss default group name
+QSERVER_VUSER_TAG=__QSERVER_VUSER__      # qss virtual user tag
 SCRIPT_DIR=$(dirname "$0")
 
-
-QSERVER_USER=   # qss main user
-QSERVER_GROUP=  # qss main group
-
+# MAIN DIRS
 APP=$SCRIPT_DIR
 APPDATA=/appdata
-RUN_DIR=/run
-
-
-
 
 # QSERVER FILES & DIRS
 QSERVER_CONFIG_FILE="$APPDATA/$CONFIG_NAME"
-QSERVER_LOG_DIR="$APPDATA/$QSERVER_LOG_DIR"
+QSERVER_LOG_DIR=/var/log/samba
 QSERVER_LOG_FILE="$QSERVER_LOG_DIR/quicksambaserver.log"
 
 # SAMBA FILES & DIRS
 SAMBA_CONF_DIR="$APP/etc"
 SAMBA_CONF_FILE="$SAMBA_CONF_DIR/smb.conf"
 AVAHI_CONF_FILE="$SAMBA_CONF_DIR/avahi.conf"
-SAMBA_LOG_FILE="$LOG_DIR/samba.log"
-PID_FILE="$RUN_DIR/samba.pid"
-
-
-# FILES
-TEMP_FILE=$(mktemp /tmp/tempfile.XXXXXX)
 
 # DEFAULT CONFIGURATION
 CFG_RESOURCE_LIST='Files|files|This resource contains files available to all users'
@@ -343,8 +327,8 @@ print_user_conf() {
     echo
 }
 
-#======================== CONTROLLING AVAHI SERVICE ========================#
 
+#========================== CONTROLLING SERVICES ===========================#
 
 launch_avahi() {
     print_template samba_avahi_service.template \
@@ -372,7 +356,9 @@ launch_netbios() {
     nmbd --daemon --configfile="$config_file" --no-process-group
 }
 
-#======================== CONTROLLING SAMBA SERVER =========================#
+kill_netbios() {
+    exit 0
+}
 
 start_samba() {
     local config_file=$1
@@ -380,6 +366,7 @@ start_samba() {
         --configfile="$config_file" \
         --debuglevel=0 --debug-stdout --foreground --no-process-group </dev/null
 }
+
 
 #========================== READING CONFIGURATION ==========================#
 
@@ -442,6 +429,7 @@ end_config() {
     # CFG_PUBLIC_RESOURCES must always start and end with a space!
     CFG_PUBLIC_RESOURCES=" $CFG_PUBLIC_RESOURCES "
 }
+
 
 #===========================================================================#
 # ///////////////////////////////// MAIN ////////////////////////////////// #
