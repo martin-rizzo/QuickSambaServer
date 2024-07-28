@@ -378,7 +378,9 @@ launch_avahi() {
     # launch the Avahi daemon in the background
     avahi-daemon --daemonize --file="$AVAHI_CONF_FILE"
 
-    # check if the Avahi daemon is running
+    # give the Avahi daemon a moment to start
+    # and check if it is running
+    sleep 1
     if avahi-daemon --check; then
         message 'Avahi daemon launched'
     else
@@ -400,14 +402,49 @@ launch_netbios() {
     # launch the NetBIOS daemon in the background
     nmbd --daemon --configfile="$config_file" --no-process-group
 
-    # check if the NetBIOS daemon is running
-    # ????
+    # give the NetBIOS daemon a moment to start
+    # and check if it is running
+    sleep 1
+    if pgrep -x "nmbd" > /dev/null; then
+        message 'NetBIOS daemon launched'
+    else
+        fatal_error 'Impossible to launch the NetBIOS daemon'
+    fi
 }
 
 # Stops the NetBIOS daemon
 #
 kill_netbios() {
-    exit 0
+    local pid
+
+    # try to get the PID from the PID file
+    pid=$(cat '/var/run/samba/nmbd.pid' 2>/dev/null)
+
+    # if no PID from the file, try to find it using pgrep
+    if [[ -z "$pid" ]] || ! ps -p "$pid" > /dev/null 2>&1; then
+        pid=$(pgrep -x "nmbd")
+    fi
+
+    # if no PID found, the NetBIOS daemon is probably not running
+    if [[ -z "$pid" ]]; then
+        message "NetBIOS daemon is not running"
+        return 0
+    fi
+
+    message "Stopping NetBIOS daemon (PID: $pid)"
+    if kill -TERM "$pid"; then
+        # wait for the process to stop
+        for _ in {1..10}; do
+            if ! ps -p "$pid" > /dev/null 2>&1; then
+                message "NetBIOS daemon stopped successfully"
+                return 0
+            fi
+            sleep 1
+        done
+        # if it's still running after 10 seconds, force kill
+        echo 'NetBIOS daemon did not stop gracefully. Forcing termination...'
+        kill -KILL "$pid"
+    fi
 }
 
 # Starts the Samba daemon with the specified configuration file.
