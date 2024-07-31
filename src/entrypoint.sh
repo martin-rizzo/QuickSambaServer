@@ -467,13 +467,6 @@ begin_config_vars() {
     # CFG_RESOURCE_LIST/CFG_USER_LIST configuration variables at the end
     TMP_RESOURCE_LIST=
     TMP_USER_LIST=
-
-    # by default, the `CFG_USER_ID` and `CFG_GROUP_ID` configuration variables
-    # will be set to the user and group of the configuration file
-    local file_info
-    file_info=$(stat -c "%u %g" "$config_file")
-    CFG_USER_ID=$( echo "$file_info" | cut -d' ' -f1)
-    CFG_GROUP_ID=$(echo "$file_info" | cut -d' ' -f2)
 }
 
 # Processes each configuration variable, updating the bash CFG_* variables
@@ -586,7 +579,7 @@ message "Switching to the app's directory: $APP"
 # if the configuration file exists, process it variable by variable.
 # otherwise, use the default configuration.
 if [[ -f "$QSERVER_CONFIG_FILE" ]]; then
-    message "Processing configuration file: $QSERVER_CONFIG_FILE"
+    message "Processing configuration file: $CONFIG_NAME"
     begin_config_vars      "$QSERVER_CONFIG_FILE"
     for_each_config_var_in "$QSERVER_CONFIG_FILE" process_config_var
     end_config_vars
@@ -594,6 +587,7 @@ else
     message "No configuration file found ($QSERVER_CONFIG_FILE)"
     message "Using default configuration"
 fi
+
 
 # get the user/group that will be used by users when accessing files.
 # the first valid ID found will be used in the following order:
@@ -603,9 +597,20 @@ fi
 #
 QSERVER_USER_ID=${USER_ID:-$CFG_USER_ID}
 QSERVER_GROUP_ID=${GROUP_ID:-$CFG_GROUP_ID}
+
+config_file_info=$(stat -c "%u %g" "$QSERVER_CONFIG_FILE")
+if [[ -z "$QSERVER_USER_ID" ]]; then
+    message "USER_ID was not defined (obtaining ID from the file permissions of $CONFIG_NAME)"
+    QSERVER_USER_ID=$( echo "$config_file_info" | cut -d' ' -f1)
+fi
+if [[ -z "$QSERVER_GROUP_ID" ]]; then
+    message "GROUP_ID was not defined (obtaining ID from the file permissions of $CONFIG_NAME)"
+    QSERVER_GROUP_ID=$(echo "$config_file_info" | cut -d' ' -f2)
+fi
+unset config_file_info
 unset USER_ID GROUP_ID
 
-message "Ensuring existence of main user/group [$QSERVER_USER_ID/$QSERVER_GROUP_ID]"
+message "Ensuring existence of USER_ID/GROUP_ID [$QSERVER_USER_ID/$QSERVER_GROUP_ID]"
   remove_qserver_user_and_group
   QSERVER_GROUP=$(add_qserver_group "$QSERVER_GROUP_ID") || exit 1
   QSERVER_USER=$(add_qserver_user   "$QSERVER_USER_ID" "$QSERVER_GROUP") || exit 1
