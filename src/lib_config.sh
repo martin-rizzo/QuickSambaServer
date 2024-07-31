@@ -123,19 +123,27 @@ function for_each_config_var_in() {
 #   - values: a string with the value or values to be formatted.
 #   - format1, format2, ...: one or more format rules to apply to each value.
 #
+# Return value:
+#   - 0 if all values were successfully formatted
+#   - 1 if any value doesn't match the required format (error)
+#
 # Example:
-#   values=$(format_value "/path/to/dir|text|true" dir txt bool)
+#   values=$(format_value "/path/to/dir|text|true|42" dir txt bool int)
 #
 #   This will format the given values according to the specified rules:
-#   "dir" for directory format, "txt" for text format, and "bool" for boolean.
+#   "dir" for directory format, "txt" for text format, "bool" for boolean,
+#   and "int" for integer.
 #
 # The function iterates through each parameter in the provided string,
 # applying the corresponding format rules. The available format rules are:
-#    - reslist : Removes all spaces.
-#    - dir     : Removes leading and trailing slashes from a directory path.
-#    - txt     : Removes leading and trailing double quotes from a text string.
-#    - bool    : Standardizes it to either TRUE or FALSE.
-#    - name|user|pass: No modification is applied.
+#    - reslist  : Removes all spaces.
+#    - dir      : Removes trailing slashes from a directory path.
+#    - reldir   : Removes leading and trailing slashes from a directory path.
+#    - txt      : Removes leading and trailing double quotes from a text string.
+#    - bool     : Standardizes it to either 'true' or 'false'.
+#    - int      : Validates that the value is an integer.
+#    - pass     : Decodes base64 if enclosed in {}.
+#    - name|user: No modification is applied.
 #
 function format_value() {
     local line=$1
@@ -170,7 +178,7 @@ function format_value() {
                 param=${param%\"}
                 ;;
 
-            # boolean - (standardize to TRUE or FALSE)
+            # boolean - (standardize to 'true' or 'false')
             bool)
                 param=$(toupper "$param")
                 if [[ $param == TRUE || $param == YES ]]; then
@@ -182,7 +190,14 @@ function format_value() {
                 fi
                 ;;
 
-            # password - (verificar si esta codificado en {base64})
+            # integer - (validate that it's an integer)
+            int)
+                if ! [[ "$param" =~ ^-?[0-9]+$ ]]; then
+                    return 1
+                fi
+                ;;
+
+            # password - (decode {base64} if encoded)
             pass)
                 if [[ "$param" == \{*\} ]]; then
                     param=${param#\{}
@@ -199,7 +214,6 @@ function format_value() {
             *)
                 continue
                 ;;
-
         esac
         [[ "$first" ]] && echo -n "$param" || echo -n "|$param"
         first=

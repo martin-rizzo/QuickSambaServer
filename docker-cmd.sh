@@ -46,7 +46,7 @@ IMAGE_NAME='quick-samba-server'
 IMAGE_USER='martinrizzo'
 CONTAINER_NAME='samba-server'
 
-# DEFAULT
+# DEFAULT: standard parameters with user mapping and mounted directory
 CONTAINER_PARAMETERS="
        {--USER}
        -v {DIR_TO_MOUNT}:/appdata:Z
@@ -54,14 +54,21 @@ CONTAINER_PARAMETERS="
        -p 445:445
 "
 
-# # AHAVI
+# # NO USER/GROUP: parameters without user mapping (determined by configuration)
+# CONTAINER_PARAMETERS="
+#        -v {DIR_TO_MOUNT}:/appdata:Z
+#        -p 139:139
+#        -p 445:445
+# "
+
+# # AVAHI: parameters for network interface access (requires host network)
 # CONTAINER_PARAMETERS="
 #        {--USER}
 #        -v {DIR_TO_MOUNT}:/appdata:Z
 #        --network host
 # "
 
-# # ERROR
+# # ERROR: invalid parameters (no directory mounted at /appdata)
 # CONTAINER_PARAMETERS="
 #        {--USER}
 #        -p 139:139

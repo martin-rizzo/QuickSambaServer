@@ -34,9 +34,8 @@
 # INPUT: USER_ID, GROUP_ID
 QSERVER_USER=                            # qss main user
 QSERVER_GROUP=                           # qss main group
-QSERVER_USER_ID=${USER_ID:-$(id -u)}     # qss main user-id
-QSERVER_GROUP_ID="${GROUP_ID:-$(id -g)}" # qss main group-id
-unset USER_ID GROUP_ID
+QSERVER_USER_ID=                         # qss main user-id
+QSERVER_GROUP_ID=                        # qss main group-id
 
 # CONSTANTS
 PROJECT_NAME=QuickSambaServer            # qss
@@ -67,7 +66,8 @@ CFG_PUBLIC_RESOURCES=
 CFG_SERVER_NAME=SMBTEST
 CFG_AVAHI=false
 CFG_NETBIOS=true
-
+CFG_USER_ID=
+CFG_GROUP_ID=
 
 #============================ MAIN SYSTEM USERS ============================#
 
@@ -459,13 +459,21 @@ start_samba() {
 
 #========================== READING CONFIGURATION ==========================#
 
-# Starts the configuration reading, initializing the temporary variables used
-begin_config() {
+# Starts the configuration reading process and initializes temporary variables
+begin_config_vars() {
+    local config_file=$1
 
     # these temporary variables are used to overwrite the
     # CFG_RESOURCE_LIST/CFG_USER_LIST configuration variables at the end
     TMP_RESOURCE_LIST=
     TMP_USER_LIST=
+
+    # by default, the `CFG_USER_ID` and `CFG_GROUP_ID` configuration variables
+    # will be set to the user and group of the configuration file
+    local file_info
+    file_info=$(stat -c "%u %g" "$config_file")
+    CFG_USER_ID=$( echo "$file_info" | cut -d' ' -f1)
+    CFG_GROUP_ID=$(echo "$file_info" | cut -d' ' -f2)
 }
 
 # Processes each configuration variable, updating the bash CFG_* variables
@@ -481,6 +489,12 @@ process_config_var() {
         USER)
             value=$(format_value "$value" user pass txt) || return $ERROR
             TMP_USER_LIST="${TMP_USER_LIST}${value}$NEWLINE"
+            ;;
+        USER_ID)
+            CFG_USER_ID=$(format_value "$value" int) || return $ERROR
+            ;;
+        GROUP_ID)
+            CFG_GROUP_ID=$(format_value "$value" int) || return $ERROR
             ;;
         SERVER_NAME)
             CFG_SERVER_NAME=$(format_value "$value" txt) || return $ERROR
@@ -501,7 +515,7 @@ process_config_var() {
 }
 
 # Finalizes the configuration reading, adjusting the processed values
-end_config() {
+end_config_vars() {
 
     # if any resource or user was configured, then overwrite
     # the default CFG_RESOURCE_LIST/CFG_USER_LIST configuration
@@ -535,7 +549,7 @@ echo -e "$BLUE$0"
 # before starting, perform several validations:
 #   1) Validate that the script is being executed with a privileged user
 #   2) Validate that the /appdata volume is correctly mounted
-#   3) Validate QSERVER_USER_ID and QSERVER_GROUP_ID
+#   3) Validate USER_ID and GROUP_ID
 #
 if ! is_root; then
     fatal_error "This Docker container can only be run with a privileged user"
@@ -545,13 +559,15 @@ if [[ ! -d "$APPDATA" ]]; then
                 "The Docker command might be missing the parameter -v {DIR_TO_MOUNT}:/appdata" \
                 "There might also be issues with SELinux (verify the SELinux settings or try disabling it temporarily)"
 fi
-message "Validating USER_ID"  # QSERVER_USER_ID
-if ! validate_integer "$QSERVER_USER_ID" ; then
-    fatal_error "USER_ID must be a valid integer value"
+if [[ -n "$USER_ID" ]]; then
+    message "Validating USER_ID"
+    validate_integer "$USER_ID" || \
+        fatal_error "USER_ID must be a valid integer value"
 fi
-message "Validating GROUP_ID" # QSERVER_GORUP_ID
-if ! validate_integer "$QSERVER_GROUP_ID" ; then
-    fatal_error "GROUP_ID must be a valid integer value"
+if [[ -n "$GROUP_ID" ]]; then
+    message "Validating GROUP_ID"
+    validate_integer "$GROUP_ID" || \
+        fatal_error "GROUP_ID must be a valid integer value"
 fi
 
 
@@ -560,10 +576,6 @@ fi
 #   2) Activate the log file
 #   3) Switch to the app's directory
 #
-message "Ensuring existence of main user/group [$QSERVER_USER_ID/$QSERVER_GROUP_ID]"
-  remove_qserver_user_and_group
-  QSERVER_GROUP=$(add_qserver_group "$QSERVER_GROUP_ID") || exit 1
-  QSERVER_USER=$(add_qserver_user   "$QSERVER_USER_ID" "$QSERVER_GROUP") || exit 1
 message "Activating the log file for this script: $QSERVER_LOG_FILE"
   set_logfile "$QSERVER_LOG_FILE"
 message "Switching to the app's directory: $APP"
@@ -575,13 +587,29 @@ message "Switching to the app's directory: $APP"
 # otherwise, use the default configuration.
 if [[ -f "$QSERVER_CONFIG_FILE" ]]; then
     message "Processing configuration file: $QSERVER_CONFIG_FILE"
-    begin_config
+    begin_config_vars      "$QSERVER_CONFIG_FILE"
     for_each_config_var_in "$QSERVER_CONFIG_FILE" process_config_var
-    end_config
+    end_config_vars
 else
     message "No configuration file found ($QSERVER_CONFIG_FILE)"
     message "Using default configuration"
 fi
+
+# get the user/group that will be used by users when accessing files.
+# the first valid ID found will be used in the following order:
+#  1) env variables `USER_ID`, `GROUP_ID` defined when launching the container
+#  2) config variables `CFG_USER_ID`, `CFG_GROUP_ID`
+#  3) the user/group of the qsamba.config file
+#
+QSERVER_USER_ID=${USER_ID:-$CFG_USER_ID}
+QSERVER_GROUP_ID=${GROUP_ID:-$CFG_GROUP_ID}
+unset USER_ID GROUP_ID
+
+message "Ensuring existence of main user/group [$QSERVER_USER_ID/$QSERVER_GROUP_ID]"
+  remove_qserver_user_and_group
+  QSERVER_GROUP=$(add_qserver_group "$QSERVER_GROUP_ID") || exit 1
+  QSERVER_USER=$(add_qserver_user   "$QSERVER_USER_ID" "$QSERVER_GROUP") || exit 1
+
 
 # generate main samba configuration
 # (temporary resource configuration files will also be created here)
