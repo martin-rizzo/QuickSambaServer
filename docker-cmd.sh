@@ -83,7 +83,7 @@ RED='\e[1;31m'
 GREEN='\e[1;32m'
 YELLOW='\e[1;33m'
 BLUE='\e[1;34m'
-PURPLE='\e[1;35m'
+#PURPLE='\e[1;35m'
 CYAN='\e[1;36m'
 DEFAULT_COLOR='\e[0m'
 PADDING='   '
@@ -141,10 +141,10 @@ docker_image_exists() {
 
 # Checks if a Docker container exists
 docker_container_exists() {
-    if [ "$(docker ps -a -q -f name=$1)" ]; then
-        return 0  # Container exists
+    if [[ -n $(docker ps -a -q -f name="$1") ]]; then
+        return 0  # container exists
     else
-        return 1  # Container does not exist
+        return 1  # container does not exist
     fi
 }
 
@@ -223,8 +223,8 @@ build_last_release() {
     fi
 
     # login to Docker Hub
-    echo "$token" | docker login --username "$user" --password-stdin
-    if [[ $? -ne 0 ]]; then
+    if ! echo "$token" | docker login --username "$user" --password-stdin
+    then
         fatal_error "Docker login failed. Please check your credentials and try again"
     fi
 
@@ -305,6 +305,7 @@ run_container() {
     parameters=${parameters//'{DIR_TO_MOUNT}'/$dir_to_mount}
     parameters=${parameters//'{--USER}'/$user_parameter}
     message "docker --log-level=$LOG_LEVEL run $parameters       --name '$CONTAINER_NAME' '$IMAGE_NAME'"
+    # shellcheck disable=2086
     docker "--log-level=$LOG_LEVEL" run $parameters --name "$CONTAINER_NAME" "$IMAGE_NAME"
 }
 
