@@ -39,7 +39,7 @@ QSERVER_GROUP_ID=                        # qss main group-id
 
 # CONSTANTS
 PROJECT_NAME=QuickSambaServer            # qss
-CONFIG_NAME=samba.config                 # qss config file
+CONFIG_NAME=qsamba                       # qss config name (.config/.ini)
 QSERVER_DEFAULT_USER=qserver             # qss default user name
 QSERVER_DEFAULT_GROUP=qserver            # qss default group name
 QSERVER_VUSER_TAG=__QSERVER_VUSER__      # qss virtual user tag
@@ -50,6 +50,7 @@ APP=$SCRIPT_DIR
 APPDATA=/appdata
 
 # QSERVER FILES & DIRS
+QSERVER_CONFIG_EXT= # will be automatically determined by the script
 QSERVER_CONFIG_FILE="$APPDATA/$CONFIG_NAME"
 QSERVER_LOG_DIR=/var/log/samba
 QSERVER_LOG_FILE="$QSERVER_LOG_DIR/quicksambaserver.log"
@@ -62,7 +63,7 @@ AVAHI_CONF_FILE="$SAMBA_CONF_DIR/avahi.conf"
 # DEFAULT CONFIGURATION
 CFG_RESOURCE_LIST='Files|files|This resource contains files available to all users'
 CFG_USER_LIST='guest||Files'
-CFG_PUBLIC_RESOURCES=
+CFG_PUBLIC_RESOURCES='  '
 CFG_SERVER_NAME=SMBTEST
 CFG_AVAHI=false
 CFG_NETBIOS=true
@@ -541,12 +542,17 @@ echo -e "$BLUE$0"
 
 # before starting, perform several validations:
 #   1) Validate that the script is being executed with a privileged user
+#   +  Activate the log file
 #   2) Validate that the /appdata volume is correctly mounted
-#   3) Validate USER_ID and GROUP_ID
+#   3) Validate USER_ID
+#   4) Validate GROUP_ID
 #
 if ! is_root; then
     fatal_error "This Docker container can only be run with a privileged user"
 fi
+message "Activating the log file for this script"
+  set_logfile "$QSERVER_LOG_FILE"
+
 if [[ ! -d "$APPDATA" ]]; then
     fatal_error "The directory '$APPDATA' has not been correctly mounted" \
                 "The Docker command might be missing the parameter -v {DIR_TO_MOUNT}:/appdata" \
@@ -563,18 +569,20 @@ if [[ -n "$GROUP_ID" ]]; then
         fatal_error "GROUP_ID must be a valid integer value"
 fi
 
-
-# proceed with the system initialization:
-#   1) Ensure the existence of the main user/group with the provided IDs
-#   2) Activate the log file
-#   3) Switch to the app's directory
-#
-message "Activating the log file for this script: $QSERVER_LOG_FILE"
-  set_logfile "$QSERVER_LOG_FILE"
+# switch to the app's directory
 message "Switching to the app's directory: $APP"
   cd "$APP" \
    || fatal_error "Failed to change directory to $APP"
 
+# determine the configuration file extension (.config/.ini)
+QSERVER_CONFIG_EXT='.config'
+if [[ ! -f "$QSERVER_CONFIG_FILE.config" ]]; then
+    if [[ -f "$QSERVER_CONFIG_FILE.ini" ]]; then
+        QSERVER_CONFIG_EXT='.ini'
+    fi
+fi
+QSERVER_CONFIG_FILE="${QSERVER_CONFIG_FILE}${QSERVER_CONFIG_EXT}"
+CONFIG_NAME="${CONFIG_NAME}${QSERVER_CONFIG_EXT}"
 
 # if the configuration file exists, process it variable by variable.
 # otherwise, use the default configuration.
@@ -582,12 +590,11 @@ if [[ -f "$QSERVER_CONFIG_FILE" ]]; then
     message "Processing configuration file: $CONFIG_NAME"
     begin_config_vars      "$QSERVER_CONFIG_FILE"
     for_each_config_var_in "$QSERVER_CONFIG_FILE" process_config_var
-    end_config_vars
+    end_config_vars        "$QSERVER_CONFIG_FILE"
 else
-    message "No configuration file found ($QSERVER_CONFIG_FILE)"
+    message "No configuration file found: $CONFIG_NAME (or .ini)"
     message "Using default configuration"
 fi
-
 
 # get the user/group that will be used by users when accessing files.
 # the first valid ID found will be used in the following order:
@@ -598,23 +605,34 @@ fi
 QSERVER_USER_ID=${USER_ID:-$CFG_USER_ID}
 QSERVER_GROUP_ID=${GROUP_ID:-$CFG_GROUP_ID}
 
-config_file_info=$(stat -c "%u %g" "$QSERVER_CONFIG_FILE")
-if [[ -z "$QSERVER_USER_ID" ]]; then
-    message "USER_ID was not defined (obtaining ID from the file permissions of $CONFIG_NAME)"
-    QSERVER_USER_ID=$( echo "$config_file_info" | cut -d' ' -f1)
-fi
-if [[ -z "$QSERVER_GROUP_ID" ]]; then
-    message "GROUP_ID was not defined (obtaining ID from the file permissions of $CONFIG_NAME)"
-    QSERVER_GROUP_ID=$(echo "$config_file_info" | cut -d' ' -f2)
-fi
-unset config_file_info
-unset USER_ID GROUP_ID
+if [[ -z "$QSERVER_USER_ID" || -z "$QSERVER_GROUP_ID" ]]; then
 
+    # If the user didn't provide USER_ID/GROUP_ID
+    # then the configuration file must exist
+    [[ -f "$QSERVER_CONFIG_FILE" ]] || \
+        fatal_error "Unable to determine USER_ID/GROUP_ID because the configuration file was not found" \
+                    "Please provide USER_ID and GROUP_ID environment variables when launching the container" \
+                    "Alternatively, create a configuration file named $CONFIG_NAME, and the script will use the user/group from its file permissions"
+
+    config_file_info=$(stat -c "%u %g" "$QSERVER_CONFIG_FILE")
+    if [[ -z "$QSERVER_USER_ID" ]]; then
+        message "USER_ID was not defined (obtaining ID from the file permissions of $CONFIG_NAME)"
+        QSERVER_USER_ID=$( echo "$config_file_info" | cut -d' ' -f1)
+    fi
+    if [[ -z "$QSERVER_GROUP_ID" ]]; then
+        message "GROUP_ID was not defined (obtaining ID from the file permissions of $CONFIG_NAME)"
+        QSERVER_GROUP_ID=$(echo "$config_file_info" | cut -d' ' -f2)
+    fi
+    unset config_file_info
+    unset USER_ID GROUP_ID
+fi
+
+
+# ensure the existence of the main user/group with the provided IDs
 message "Ensuring existence of USER_ID/GROUP_ID [$QSERVER_USER_ID/$QSERVER_GROUP_ID]"
   remove_qserver_user_and_group
   QSERVER_GROUP=$(add_qserver_group "$QSERVER_GROUP_ID") || exit 1
   QSERVER_USER=$(add_qserver_user   "$QSERVER_USER_ID" "$QSERVER_GROUP") || exit 1
-
 
 # generate main samba configuration
 # (temporary resource configuration files will also be created here)
