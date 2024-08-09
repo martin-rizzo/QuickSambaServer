@@ -171,64 +171,85 @@ add_samba_vuser() {
 
 # Removes all users previously created with 'add_samba_vuser()'
 #
+# Usage: remove_all_samba_vusers <config_file>
+#
+# Example:
+#   remove_all_samba_vusers "$SAMBA_CONF_FILE"
+#
 remove_all_samba_vusers() {
+    local config_file=$1
+
+    # if the configuration file does not exist, return without doing anything
+    [[ ! -f "$config_file" ]] && return
 
     # remove all users from the Samba registry
-    # shellcheck disable=2034
-    pdbedit --configfile="$SAMBA_CONF_FILE" --list | \
-    while IFS=':' read -r username more; do
+    pdbedit --configfile="$config_file" --list | \
+    while IFS=':' read -r username _; do
         echo "Removing Samba user $username"
-        pdbedit --configfile="$SAMBA_CONF_FILE" --delete --user="$username"
+        pdbedit --configfile="$config_file" --delete --user="$username"
     done
 
     # remove virtual users from the system
     sed -i "/$QSERVER_VUSER_TAG/d" /etc/passwd
 }
 
-#==================== RESOURCE CONFIGURATION FILE PATHS ====================#
-
-# Generates the full path for a temporary resource configuration file
-#
-# Usage: make_resconf_path <resource_name> [mode]
-#
-# Parameters:
-#   - resource_name: the name of the resource, e.g., "Files", "Music"
-#   - mode         : (optional) can be 'ro', 'rw', or 'def' (read-only, writable, and default)
-#                    Defaults to 'def' if not provided.
-# Example:
-#   files_conf_path=$(make_resconf_path "Files" "rw")
-#
-get_res_config_path() {
-    local resource_name=$1
-    echo "$SAMBA_CONF_DIR/$resource_name.res_config"
-}
-
-# Removes all temporary resource config files created by 'get_res_config_path()'
-#
-remove_all_res_config_files() {
-    rm -f "$SAMBA_CONF_DIR"/*.res_config
-}
-
 
 #====================== BUILDING SAMBA CONFIGURATION =======================#
 
-# Prints the complete samba configuration
+parse_resource() {
+    local flag_resname=$1 flag resname
+    case "$flag_resname" in
+         '-'*) flag='-' ; resname=${flag_resname#-} ; resname=${resname#-} ;;
+        'w:'*) flag='w' ; resname=${flag_resname:2} ;;
+        'r:'*) flag='r' ; resname=${flag_resname:2} ;;
+            *) flag=''  ; resname=${flag_resname}   ;;
+    esac
+    echo "$flag|$resname"
+}
+
+# Generates the resource data used by 'print_user_conf()/print_samba_conf()'
 #
-# Usage: print_samba_conf <resource_list> [template_file]
+# Usage:  generate_resource_data <resdata_prefix> <resource_list>
 #
 # Parameters:
-#   - resource_list: a list of resources in the format "name|dir|comment"
+#   - resdata_prefix: Prefix used to store data for each resource
+#   - resource_list : A list of resources in the format "name|dir|comment"
+#
+# Example:
+#   generate_resource_data resdata "$CFG_RESOURCE_LIST"
+#
+generate_resource_data() {
+    local resdata_prefix=$1 resource_list=$2
+
+    rm -f "$SAMBA_CONF_DIR/$resdata_prefix".tmpdata
+    echo "$resource_list" | \
+    while IFS='|' read -r flag_resname directory comment; do
+        IFS='|'   read -r flag resname < <(parse_resource "$flag_resname")
+        [[ -z "$resname" || -z "$directory" ]] && continue
+        echo "$flag|$resname|$directory|$comment" >  "$SAMBA_CONF_DIR/$resdata_prefix-$resname".tmpdata
+        echo "$flag|$resname|$directory|$comment" >> "$SAMBA_CONF_DIR/$resdata_prefix".tmpdata
+    done
+}
+
+# Prints the complete samba configuration
+#
+# Usage: print_samba_conf <resdata_prefix> [template_file]
+#
+# Parameters:
+#   - resdata_prefix: Prefix used to store data for each resource, must be the
+#                     same as the one provided to 'generate_resource_data()'
 #   - template_file: (optional) the file used as a template.
 #                    Defaults to 'samba_conf.template' if not provided.
 #
 # Example:
-#   print_samba_conf "$CFG_RESOURCE_LIST" > "/app/etc/samba.conf"
+#   print_samba_conf resdata > "/app/etc/samba.conf"
 #
 print_samba_conf() {
-    local resource_list=$1 template_file=${2:-'samba_config.template'}
+    local resdata_prefix=$1 template_file=${2:-'samba_config.template'}
     [[ ! -f "$template_file" ]] && fatal_error "print_samba_conf() requires the file $template_file"
 
-    global_resources_conf=$(print_global_resources_conf "$resource_list")
+    global_resources_conf=$(print_global_resources_conf "$resdata_prefix")
+
     print_template "content:$(cat "$template_file")"        \
         '{SERVER_NAME}'           "$CFG_SERVER_NAME"        \
         '{SAMBA_CONF_DIR}'        "$SAMBA_CONF_DIR"         \
@@ -237,6 +258,35 @@ print_samba_conf() {
         '{GUEST_USER}'            "$QSERVER_USER"           \
         '{GLOBAL_RESOURCES_CONF}' "$global_resources_conf"  \
         '{USER_RESOURCES_CONF}'   "include = $SAMBA_CONF_DIR/%U.conf"
+}
+
+# Prints the global resources configuration based on the provided resdata
+#
+# Usage:  print_global_resources_conf <resdata_prefix>
+#
+# Parameters:
+#   - resdata_prefix: Prefix used to store data for each resource
+#
+# Example:
+#   print_global_resources_conf resdata
+#
+print_global_resources_conf() {
+    local resdata_prefix=$1
+    local visible writeable
+
+    while IFS='|' read -r flag resname directory comment; do
+        [[ -z "$resname" || -z "$directory" ]] && continue
+        case "$flag" in
+             '-') visible='no'  ; writeable='no'  ;;
+             'w') visible='yes' ; writeable='yes' ;;
+             'r') visible='yes' ; writeable='no'  ;;
+               *) visible='yes' ; writeable='no'  ;;
+        esac
+        if [[ "$visible" == 'yes' ]]; then
+            print_resource_conf 'global_resource.template' \
+                "$resname" "$directory" "$writeable" "$comment" "$CFG_PUBLIC_RESOURCES"
+        fi
+    done < "$SAMBA_CONF_DIR/$resdata_prefix".tmpdata
 }
 
 # Prints resource configuration
@@ -281,69 +331,41 @@ print_resource_conf() {
         '{PUBLIC}'         "$public"
 }
 
-# Prints the global resources configuration based on the provided resource list
-#
-# Usage:  print_global_resources_conf <resource_list>
-#
-# Parameters:
-#   - resource_list: A list of resources in the format "name|dir|comment"
-#
-# Note:
-#   Stores resource information in 'resource-$resname.data' files
-#   This information will later be used by 'print_user_conf()'
-#
-# Example:
-#   print_global_resources_conf "$CFG_RESOURCE_LIST"
-#
-print_global_resources_conf() {
-    local resource_list=$1
-    local visible writeable
-
-    echo "$resource_list" | \
-    while IFS='|' read -r resname directory comment; do
-        case "$resname" in
-               '') continue ;;
-             '-'*) visible='no'  ; writeable='no'  ; resname=${resname#-} ; resname=${resname#-} ;;
-            'w:'*) visible='yes' ; writeable='yes' ; resname=${resname:2} ;;
-            'r:'*) visible='yes' ; writeable='no'  ; resname=${resname:2} ;;
-                *) visible='yes' ; writeable='no'  ;;
-        esac
-        echo "$directory|$comment" > "resource-$resname.data"
-        if [[ "$visible" == 'yes' ]]; then
-            print_resource_conf 'global_resource.template' \
-                "$resname" "$directory" "$writeable" "$comment" "$CFG_PUBLIC_RESOURCES"
-        fi
-    done
-}
-
 # Prints the user custom configuration based on provided user resources list
 #
-# Usage:  print_user_conf <username> <resources>
+# Usage:  print_user_conf <username> <resources> <resdata_prefix>
 #
 # Parameters:
-#   - username : The name of the user.
-#   - resources: A space-separated list of user resources.
+#   - username      : The name of the user.
+#   - resources     : A space-separated list of user resources.
+#   - resdata_prefix: Prefix used to store data for each resource, must be the
+#                     same as the one provided to 'generate_resource_data()'
 #
 # Note:
-#   Requires resource information from 'resource-$resname.data' files
-#   which were previously created with 'print_global_resources_conf()'
+#   Requires resource information from '$resdata_prefix-$resname.data' files
+#   which were previously created with 'generate_resource_data()'
 #
 # Example:
-#   print_user_conf "user1" "w:Files r:Music -Documents"
+#   print_user_conf "user1" "w:Files r:Music -Documents" resdata
 #
 print_user_conf() {
-    local username=$1 resources=$2
+    local username=$1 resources=$2 resdata_prefix=$3
     local template visible writeable
 
-    for resname in $resources; do
-        case "$resname" in
-               '') continue ;;
-             '-'*) visible='no'  ; writeable='no'  ; resname=${resname#-} ; resname=${resname#-} ;;
-            'w:'*) visible='yes' ; writeable='yes' ; resname=${resname:2} ;;
-            'r:'*) visible='yes' ; writeable='no'  ; resname=${resname:2} ;;
-                *) visible='yes' ; writeable='no' ;;
-        esac
+    for flag_resname in $resources; do
 
+        IFS='|' read -r flag resname < <(parse_resource "$flag_resname")
+        [[ -z "$resname" ]] && continue
+        [[ ! -f "$SAMBA_CONF_DIR/$resdata_prefix-$resname".tmpdata ]] && continue
+
+        # shellcheck disable=2034
+        IFS='|' read -r default_flag _ directory comment < "$SAMBA_CONF_DIR/$resdata_prefix-$resname".tmpdata
+        case "$flag" in
+            '-') visible='no'  ; writeable='no'  ;;
+            'w') visible='yes' ; writeable='yes' ;;
+            'r') visible='yes' ; writeable='no'  ;;
+              *) visible='yes' ; writeable='no'  ;;
+        esac
         local template='local_resource.template'
         #if [[ $visible == 'no' ]]; then
         #    template='invisible_resource.template'
@@ -351,11 +373,25 @@ print_user_conf() {
         #    template=$(get_res_config_path "$resname")
         #fi
 
-        IFS='|' read -r directory comment < "resource-$resname.data"
         print_resource_conf 'local_resource.template' \
             "$resname" "$directory" "$writeable" "$comment" "$CFG_PUBLIC_RESOURCES"
     done
     echo
+}
+
+# Removes the temporary data files created by 'generate_resource_data()'
+#
+# Usage:  remove_resource_data <resdata_prefix>
+#
+# Parameters:
+#   - resdata_prefix: Prefix used to store data for each resource
+#
+# Example:
+#   remove_resource_data resdata
+#
+remove_resource_data() {
+    local resdata_prefix=$1
+    rm -f "$SAMBA_CONF_DIR/$resdata_prefix"*.tmpdata
 }
 
 
@@ -628,34 +664,39 @@ if [[ -z "$QSERVER_USER_ID" || -z "$QSERVER_GROUP_ID" ]]; then
 fi
 
 
+
+# remove all pre-existing users
+message "Resetting all users"
+remove_all_samba_vusers "$SAMBA_CONF_FILE"
+remove_qserver_user_and_group
+
 # ensure the existence of the main user/group with the provided IDs
 message "Ensuring existence of USER_ID/GROUP_ID [$QSERVER_USER_ID/$QSERVER_GROUP_ID]"
-  remove_qserver_user_and_group
-  QSERVER_GROUP=$(add_qserver_group "$QSERVER_GROUP_ID") || exit 1
-  QSERVER_USER=$(add_qserver_user   "$QSERVER_USER_ID" "$QSERVER_GROUP") || exit 1
+QSERVER_GROUP=$(add_qserver_group "$QSERVER_GROUP_ID") || exit 1
+QSERVER_USER=$(add_qserver_user   "$QSERVER_USER_ID" "$QSERVER_GROUP") || exit 1
 
-# generate main samba configuration
-# (temporary resource configuration files will also be created here)
-message "Generando configuracion"
-print_samba_conf "$CFG_RESOURCE_LIST" > "$SAMBA_CONF_FILE"
 
-# remove any previously created users
-message "Resetting virtual users"
-remove_all_samba_vusers
+
+generate_resource_data resdata "$CFG_RESOURCE_LIST"
+
+# create main samba configuration
+message "Generating main Samba configuration"
+print_samba_conf resdata > "$SAMBA_CONF_FILE"
 
 # create configuration for each user
+message "Generating user configurations"
 echo "$CFG_USER_LIST" | \
 while IFS='|' read -r username password resources; do
     if [[ -n $username && $username != 'guest' ]]; then
         output_file="$SAMBA_CONF_DIR/$username.conf"
         add_samba_vuser "$username" "$password"
-        print_user_conf "$username" "$resources" > "$output_file"
+        print_user_conf "$username" "$resources" resdata > "$output_file"
     fi
 done
 
-# remove temporary resource configuration files
-# created during the main configuration generation
-remove_all_res_config_files
+remove_resource_data resdata
+
+
 
 if [[ "$CFG_AVAHI" == true ]]; then
     message "Launching Avahi service"
