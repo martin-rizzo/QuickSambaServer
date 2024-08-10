@@ -1,0 +1,12 @@
+##>
+##> Configuration template for resources.
+##> used in global resources as well as resources defined for each user
+##> -------------------------------------------------------------------------
+
+[{RESOURCE_NAME}]
+  comment       = {COMMENT}
+  path          = {PATH}
+  browseable    = {BROWSEABLE}
+  public        = {PUBLIC}
+  writeable     = {WRITEABLE}
+  {EXTRA_CONFIG}

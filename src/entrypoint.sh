@@ -283,52 +283,61 @@ print_global_resources_conf() {
                *) visible='yes' ; writeable='no'  ;;
         esac
         if [[ "$visible" == 'yes' ]]; then
-            print_resource_conf 'global_resource.template' \
-                "$resname" "$directory" "$writeable" "$comment" "$CFG_PUBLIC_RESOURCES"
+            print_resource_conf 'resource_config.template' \
+                "$resname" "$comment" "$directory" 'yes' "$writeable" '' "$CFG_PUBLIC_RESOURCES"
         fi
     done < "$SAMBA_CONF_DIR/$resdata_prefix".tmpdata
 }
 
 # Prints resource configuration
 #
-# Usage: print_resource_conf <template> <resource_name> <directory> <writeable> <comment> <public_resources>
+# Usage: print_resource_conf <template> <resource_name> <comment> <directory> <browseable> <writeable> <public_resources>
 #
 # Parameters:
 #   - template     : The template file used for printing the configuration.
 #   - resource_name: The name of the resource.
-#   - directory    : The directory path for the resource.
-#   - writeable    : Indicates if the resource is writeable. Should be 'yes' or 'no'.
 #   - comment      : A comment or description for the resource.
+#   - directory    : The directory path for the resource.
+#   - browseable   : Indicates whether the resource is visible in the client. Should be 'yes' or 'no'.
+#   - writeable    : Indicates if the resource is writeable. Should be 'yes' or 'no'.
+#   - extra_config : Any extra configuration that you want to add to the resource.
 #   - public_resources: A list of public resources. Must start and end with a space.
 #
 # Example:
-#   print_resource_conf 'resource.template' 'MyResource' 'my/dir' 'yes' 'My comment' ' PublicResource '
+#   print_resource_conf 'resource.template' 'MyResource' 'My comment' '/home/user/shared' 'yes' 'no' 'invalid users = user1' ' PublicResource1 PublicResource2 '
 #
 print_resource_conf() {
-    local template=$1 resource_name=$2 directory=$3 writeable=$4 comment=$5 public_resources=$6
-    local path public
+    local template=$1 resource_name=$2 comment=$3 directory=$4 browseable=$5 writeable=$6
+    local extra_config=$7 public_resources=$8
+    local path
 
     # $writeable can be 'yes' or 'no'
     [[ "$writeable" == 'yes' || "$writeable" == 'no' ]] || \
-        fatal_error "print_resource_conf() requires \$writeable to be 'yes' or 'no'. You provided '$writeable' instead"
+        internal_error "print_resource_conf() requires \$writeable to be 'yes' or 'no'. You provided '$writeable' instead"
+
+    # $browseable can be 'yes' or 'no'
+    [[ "$browseable" == 'yes' || "$browseable" == 'no' ]] || \
+        internal_error "print_resource_conf() requires \$browseable to be 'yes' or 'no'. You provided '$writeable' instead"
 
     # $public_resources must start and end with a space
     [[ "${public_resources:0:1}" == ' ' && "${public_resources: -1}" == ' ' ]] || \
-        fatal_error "print_resource_conf() requires public_resources to start and end with spaces"
+        internal_error "print_resource_conf() requires public_resources to start and end with spaces"
 
-    path="$APPDATA/$directory"
+    local path="$APPDATA/$directory"
 
     # if the resource name is included in $public_resources
     # then make the resource 'public'
-    public='no'
+    local public='no'
     [[ "$public_resources" == *" $resource_name "* ]] && public='yes'
 
     print_template "$template" \
         '{RESOURCE_NAME}'  "$resource_name" \
         '{COMMENT}'        "$comment"       \
         '{PATH}'           "$path"          \
+        '{BROWSEABLE}'     "$browseable"    \
+        '{PUBLIC}'         "$public"        \
         '{WRITEABLE}'      "$writeable"     \
-        '{PUBLIC}'         "$public"
+        '{EXTRA_CONFIG}'   "$extra_config"
 }
 
 # Prints the user custom configuration based on provided user resources list
@@ -350,31 +359,32 @@ print_resource_conf() {
 #
 print_user_conf() {
     local username=$1 resources=$2 resdata_prefix=$3
-    local template visible writeable
 
     for flag_resname in $resources; do
 
         IFS='|' read -r flag resname < <(parse_resource "$flag_resname")
         [[ -z "$resname" ]] && continue
+
+        # gets the global resource configuration
         [[ ! -f "$SAMBA_CONF_DIR/$resdata_prefix-$resname".tmpdata ]] && continue
+        IFS='|' read -r global_flag _ directory comment < "$SAMBA_CONF_DIR/$resdata_prefix-$resname".tmpdata
 
-        # shellcheck disable=2034
-        IFS='|' read -r default_flag _ directory comment < "$SAMBA_CONF_DIR/$resdata_prefix-$resname".tmpdata
+        # resolves the case where the user resource has no flag,
+        # it will be read-only by default unless the global resource is 'w:'
+        if [[ -z "$flag" ]]; then
+            flag='r'
+            [[ "$global_flag" = 'w' ]] && flag='w'
+        fi
+
+        local browseable='yes' writeable='no'
         case "$flag" in
-            '-') visible='no'  ; writeable='no'  ;;
-            'w') visible='yes' ; writeable='yes' ;;
-            'r') visible='yes' ; writeable='no'  ;;
-              *) visible='yes' ; writeable='no'  ;;
+            '-') browseable='no'  ; writeable='no'  ; extra="invalid users = $username" ;;
+            'w') browseable='yes' ; writeable='yes' ; extra='' ;;
+            'r') browseable='yes' ; writeable='no'  ; extra='' ;;
+              *) internal_error "invalid resource flag '$flag' in print_user_conf()"  ;;
         esac
-        local template='local_resource.template'
-        #if [[ $visible == 'no' ]]; then
-        #    template='invisible_resource.template'
-        #elif [[ $writeable == 'default' ]]; then
-        #    template=$(get_res_config_path "$resname")
-        #fi
-
-        print_resource_conf 'local_resource.template' \
-            "$resname" "$directory" "$writeable" "$comment" "$CFG_PUBLIC_RESOURCES"
+        print_resource_conf 'resource_config.template' \
+            "$resname" "$comment" "$directory" "$browseable" "$writeable" "$extra" "  "
     done
     echo
 }

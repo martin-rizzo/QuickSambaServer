@@ -49,8 +49,7 @@ COPY                                      \
   lib_utils.sh                            \
   entrypoint.sh                           \
   templates/avahi_config.template         \
-  templates/global_resource.template      \
-  templates/local_resource.template       \
+  templates/resource_config.template      \
   templates/samba_avahi_service.template  \
   templates/samba_config.template         \
   templates/samba_user.template           \
