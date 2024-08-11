@@ -197,6 +197,13 @@ function format_value() {
                 fi
                 ;;
 
+            # permission - (validate format for Linux file permissions)
+            mode)
+                if ! [[ "$param" =~ ^[0-7]{3,4}$ ]]; then
+                    return 1
+                fi
+                ;;
+
             # password - (decode {base64} if encoded)
             pass)
                 if [[ "$param" == \{*\} ]]; then

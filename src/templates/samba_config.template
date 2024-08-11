@@ -1,67 +1,75 @@
 [global]
 
-#== MAIN CONFIG ===========================================
+#== MAIN ==================================================
 
-    ## Este nombre es usado para organizar y agrupar computadoras
-    ## en una red local, facilitando la localización y el acceso a
-    ## recursos compartidos.
+    # This name is used to organize and group computers on a local
+    # network, making it easier to locate and access shared resources.
         workgroup = WORKGROUP
 
-    # Set the server description that will appear in the network browser
+    # Sets the server description that will appear in the network browser
         server string = Samba Server
 
-    # Map unknown users or users with incorrect passwords to the guest account
-        map to guest = Bad User
-
-    # Specify which system account will be used for guest access
-        guest account = {GUEST_USER}
-
-    ## Este nombre es el que otros equipos en la red utilizarán para
-    ## identificar y acceder al servidor Samba. Si no se establece,
-    ## por defecto tomará el nombre del host de la máquina.
+    # This name is what other computers on the network will use to
+    # identify and access the Samba server. If not set, it will
+    # default to the hostname of the machine.
         netbios name = {SERVER_NAME}
 
+    ## Controls whether the Samba server should register with
+    ## multicast DNS services (mDNS), such as Avahi.
+    ## Allows the Samba server to be discovered by other devices
+    ## on the network that use mDNS, making it easier to discover
+    ## services and shared resources
+    #    multicast dns register  = no
 
-#    ## Controla si el servidor Samba debe registrarse con los servicios
-#    ## de DNS multicast (mDNS), como Avahi.
-#    ## Permite que el servidor Samba sea descubierto por otros dispositivos
-#    ## en la red que utilizan mDNS, facilitando la detección de servicios
-#    ## y recursos compartidos.
-#        multicast dns register  = no
+    ## Specifies the IP address of a DNS server to which DNS queries
+    ## that the Samba server cannot resolve locally will be forwarded.
+    ## This is useful in environments where the Samba server needs to
+    ## resolve domain names that are not in its own DNS database.
+    #    dns forwarder = 10.0.0.1
 
-#    ## Especifica la dirección IP de un servidor DNS al que se reenviarán
-#    ## las consultas DNS que el servidor Samba no pueda resolver localmente.
-#    ## Es útil en entornos donde el servidor Samba necesita resolver nombres
-#    ## de dominio que no están en su propia base de datos DNS.
-#        dns forwarder = 10.0.0.1
-
-#  ## bind samba services to the 10.0.0.5 address
-#        bind interfaces only = yes
-#        interfaces           = 10.0.0.5
-
-#???  ## Active Directory
-#???        server role                = active directory domain controller
-#???        winbind use default domain = yes
-#???        idmap_ldb:use rfc2307      = yes
-
-#???  ## Kerberos
-#???        realm = LOCALNET.LAN
+    ## Binds samba services to the specified IP address
+    #    bind interfaces only = yes
+    #    interfaces           = 10.0.0.1
 
 
-#== USER/GROUP CONFIG  ====================================
+#== USER/PERMISSIONS ======================================
 
-#  ## all samba users are forced to share linux-group "samba", then:
-#  ## *files will always have permission       = 0660
-#  ## *directories will always have permission = 0770
-#        force group          = samba
-#        create mask          = 0660
-#        force create mode    = 0660
-#        directory mask       = 0770
-#        force directory mode = 0770
+    # Maps unknown users or users with incorrect passwords to the guest account
+        map to guest = Bad User
 
-#???        client lanman auth = Yes
-#???        map to guest  = Bad User
-#???        guest account = samba
+    # Specifies which system account will be used for guest access
+    # - placeholder should be replaced with an actual linux username
+        guest account = {GUEST_USER}
+
+    # Permissions for newly created files
+    # - placeholder should be replaced with octal permission code (e.g., 0644)
+        create mask       = {CREATE_MASK}
+        force create mode = {FORCE_CREATE_MODE}
+
+    # Permissions for newly created directories
+    # - placeholder should be replaced with octal permission code (e.g., 0755)
+        directory mask       = {DIRECTORY_MASK}
+        force directory mode = {FORCE_DIRECTORY_MODE}
+
+    ## WIN95/98 SUPPORT (deprecated)
+    ## these lines are deprecated and should not be used
+    #    client lanman auth    = yes
+    #    client plaintext auth = yes
+
+
+#== LOG ===================================================
+
+    # Determines the amount of information that is logged to the samba log file
+    #  - allows configuring log level per topic, e.g. "0 passdb:1 auth:5"
+    #  - min = 0 / max = 10
+    log level = 0
+
+    # Sets the maximum size of the samba log file in kilobytes, then rotate
+    #  - size of 0 means no limit (default = 5000)
+    max log size = 64
+
+    # Controls whether timestamps are included in the samba log file
+    timestamp logs  = no
 
 
 #== OPTIMIZATIONS  ========================================
@@ -91,27 +99,6 @@
 #        #allow insecure wide links = yes
 
 
-#== LOG ===================================================
-
-#   ## max 64kb per log file, then rotate
-#   ## minimo log (level =  0)
-#   ## maximo log (level = 10)
-#
-#         max log size    = 64
-#         log level       = 0 passdb:0 auth:0
-#         timestamp logs  = no
-
-
-#== ACTIVE DIRECTORY ======================================
-
-#??? [sysvol]
-#???        path = /var/lib/samba/sysvol
-#???        read only = No
-
-#??? [netlogon]
-#???        path = /var/lib/samba/sysvol/localnet.lan/scripts
-#???        read only = No
-
 #== GLOBAL RESOURCES ======================================
 
 {GLOBAL_RESOURCES_CONF}
@@ -119,5 +106,4 @@
 #== USER RESOURCES ========================================
 
 {USER_RESOURCES_CONF}
-
 

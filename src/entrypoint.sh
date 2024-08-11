@@ -69,6 +69,9 @@ CFG_AVAHI=false
 CFG_NETBIOS=true
 CFG_USER_ID=
 CFG_GROUP_ID=
+CFG_NEW_DIR_MODE=
+CFG_NEW_FILE_MODE=
+
 
 #============================ MAIN SYSTEM USERS ============================#
 
@@ -248,14 +251,42 @@ print_samba_conf() {
     local resdata_prefix=$1 template_file=${2:-'samba_config.template'}
     [[ ! -f "$template_file" ]] && fatal_error "print_samba_conf() requires the file $template_file"
 
+    # set default values for file and directory permission masks and force modes.
+    local create_mask=0744
+    local directory_mask=0755
+    local force_create_mode=0000
+    local force_directory_mode=0000
+
+    # if the user has specified a custom permission mode for newly created directories,
+    # update the directory mask and force mode variables
+    if [[ -n "$CFG_NEW_DIR_MODE" ]]; then
+        directory_mask=$CFG_NEW_DIR_MODE
+        force_directory_mode=$CFG_NEW_DIR_MODE
+    fi
+
+    # if the user has specified a custom permission mode for newly created files,
+    # update the file mask and force mode variables
+    if [[ -n "$CFG_NEW_FILE_MODE" ]]; then
+        create_mask=$CFG_NEW_FILE_MODE
+        force_create_mode=$CFG_NEW_FILE_MODE
+    fi
+
+    # generate the configuration for global resources accessible to all users
+    local global_resources_conf
     global_resources_conf=$(print_global_resources_conf "$resdata_prefix")
 
+    # print the Samba configuration template,
+    # replacing placeholders with actual values
     print_template "content:$(cat "$template_file")"        \
         '{SERVER_NAME}'           "$CFG_SERVER_NAME"        \
         '{SAMBA_CONF_DIR}'        "$SAMBA_CONF_DIR"         \
         '{MAIN_USER_NAME}'        "$QSERVER_USER"           \
         '{MAIN_GROUP_NAME}'       "$QSERVER_GROUP"          \
         '{GUEST_USER}'            "$QSERVER_USER"           \
+        '{CREATE_MASK}'           "$create_mask"            \
+        '{FORCE_CREATE_MODE}'     "$force_create_mode"      \
+        '{DIRECTORY_MASK}'        "$directory_mask"         \
+        '{FORCE_DIRECTORY_MODE}'  "$force_directory_mode"   \
         '{GLOBAL_RESOURCES_CONF}' "$global_resources_conf"  \
         '{USER_RESOURCES_CONF}'   "include = $SAMBA_CONF_DIR/%U.conf"
 }
@@ -547,6 +578,12 @@ process_config_var() {
             ;;
         PUBLIC_RESOURCES)
             CFG_PUBLIC_RESOURCES="$(format_value "$value" txt)" || return $ERROR
+            ;;
+        NEW_DIR_MODE)
+            CFG_NEW_DIR_MODE="$(format_value "$value" mode)" || return $ERROR
+            ;;
+        NEW_FILE_MODE)
+            CFG_NEW_FILE_MODE="$(format_value "$value" mode)" || return $ERROR
             ;;
         PRINT_ERROR)
             echo "ERROR: $value"
